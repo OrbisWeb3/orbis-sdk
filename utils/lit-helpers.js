@@ -1,13 +1,21 @@
 import LitJsSdk from 'lit-js-sdk'
 import { toUtf8Bytes } from "@ethersproject/strings";
 import { hexlify } from "@ethersproject/bytes";
-import { blobToBase64, decodeb64, buf2hex, getAddressFromDid } from "./index.js";
+import { blobToBase64, decodeb64, buf2hex, getAddressFromDid, sleep } from "./index.js";
 
 /** Initialize lit */
 let lit;
+let litReady = false;
 export function connectLit() {
   lit = new LitJsSdk.LitNodeClient({alertWhenUnauthorized: false})
   lit.connect()
+
+  if(document) {
+    document.addEventListener('lit-ready', function (e) {
+      console.log('Lit is ready')
+      litReady = true;
+    }, false)
+  }
 }
 
 /** Requires user to sign a message which will generate the lit-signature */
@@ -59,15 +67,16 @@ function getAuthSig() {
   }
 }
 
+
 /** Decrypt a string using Lit based on a set of inputs. */
-export async function decryptString(encryptedMessage) {
+export async function decryptString(encryptedContent) {
   /** Retrieve AuthSig */
   let authSig = getAuthSig();
 
   /** Decode string encoded as b64 to be supported by Ceramic */
   let decodedString;
   try {
-    decodedString = decodeb64(encryptedMessage.encryptedString);
+    decodedString = decodeb64(encryptedContent.encryptedString);
   } catch(e) {
     console.log("Error decoding b64 string: ", e);
     throw new Error(e);
@@ -75,19 +84,18 @@ export async function decryptString(encryptedMessage) {
 
   let _access;
   try {
-    _access = JSON.parse(encryptedMessage.accessControlConditions);
+    _access = JSON.parse(encryptedContent.accessControlConditions);
   } catch(e) {
     console.log("Couldn't parse accessControlConditions: ", e);
     throw new Error(e);
   }
-
 
   /** Get encryption key from Lit */
   let decryptedSymmKey;
   try {
     decryptedSymmKey = await lit.getEncryptionKey({
         accessControlConditions: _access,
-        toDecrypt: encryptedMessage.encryptedSymmetricKey,
+        toDecrypt: encryptedContent.encryptedSymmetricKey,
         chain: 'ethereum',
         authSig
     })
@@ -110,13 +118,13 @@ export async function decryptString(encryptedMessage) {
 }
 
 /** Encryp a DM */
-export async function encryptDM(recipients, message) {
+export async function encryptDM(recipients, body) {
   /** Step 1: Retrieve access control conditions from recipients */
   let accessControlConditions = generateAccessControlConditionsForDMs(recipients);
 
   /** Step 2: Encrypt string and return result */
   try {
-    let result = await encryptString(accessControlConditions, message);
+    let result = await encryptString(accessControlConditions, body);
     return result
   } catch(e) {
     console.log("Error encrypting DM: ", e);
@@ -124,13 +132,28 @@ export async function encryptDM(recipients, message) {
   }
 }
 
+/** Encrypt post based on the encryptionRules added by the user */
+export async function encryptPost(encryptionRules, body) {
+  /** Step 1: Retrieve access control conditions from recipients */
+  let accessControlConditions = generateAccessControlConditionsForPosts(encryptionRules);
+
+  /** Step 2: Encrypt string and return result */
+  try {
+    let result = await encryptString(accessControlConditions, body);
+    return result
+  } catch(e) {
+    console.log("Error encrypting post: ", e);
+    throw new Error(e)
+  }
+}
+
 /** Encrypt string based on some access control conditions */
-export async function encryptString(accessControlConditions, message) {
+export async function encryptString(accessControlConditions, body) {
   /** Step 1: Retrieve AuthSig */
   let authSig = getAuthSig();
 
   /** Step 2: Encrypt message */
-  const { encryptedString, symmetricKey } = await LitJsSdk.encryptString(message);
+  const { encryptedString, symmetricKey } = await LitJsSdk.encryptString(body);
 
   /** We convert the encrypted string to base64 to make it work with Ceramic */
   let base64EncryptedString = await blobToBase64(encryptedString);
@@ -165,8 +188,6 @@ export function generateAccessControlConditionsForDMs(recipients) {
   recipients.forEach((recipient, i) => {
     /** Get ETH address from DiD */
     let { address, network } = getAddressFromDid(recipient);
-    console.log("Address recipient: " + address);
-    console.log("network recipient: " + network);
 
     if(network == "eip155") {
       /** Push access control condition to array */
@@ -194,6 +215,56 @@ export function generateAccessControlConditionsForDMs(recipients) {
 
 
   });
+
+  /** Return clean access control conditions */
+  return _accessControlConditions;
+}
+
+/** This function will take the encryptionRules object and turn it into a clean access control conditions array */
+export function generateAccessControlConditionsForPosts(encryptionRules) {
+  let _accessControlConditions = [];
+
+  switch(encryptionRules.type) {
+    case "token-gated":
+      let chain = encryptionRules.chain;
+      let contractType = encryptionRules.contractType; // Can be only ERC20 or ERC721
+      let contractAddress = encryptionRules.contractAddress;
+      let minTokenBalance = encryptionRules.minTokenBalance;
+
+      if(encryptionRules.contractType == "ERC20" || encryptionRules.contractType == "ERC721") {
+        /** Adds an access control condition based on token gated content */
+        _accessControlConditions.push({
+          contractAddress: encryptionRules.contractAddress,
+          standardContractType: encryptionRules.contractType,
+          chain: encryptionRules.chain,
+          method: 'balanceOf',
+          parameters: [
+            ':userAddress'
+          ],
+          returnValueTest: {
+            comparator: '>=',
+            value: encryptionRules.minTokenBalance
+          }
+        });
+      } else if(encryptionRules.contractType == "ERC1155") {
+        _accessControlConditions.push({
+          contractAddress: encryptionRules.contractAddress,
+          standardContractType: encryptionRules.contractType,
+          chain: encryptionRules.chain,
+          method: 'balanceOf',
+          parameters: [
+            ':userAddress',
+            encryptionRules.tokenId
+          ],
+          returnValueTest: {
+            comparator: '>=',
+            value: encryptionRules.minTokenBalance
+          }
+        });
+      }
+
+      break;
+  }
 
   /** Return clean access control conditions */
   return _accessControlConditions;
