@@ -6,16 +6,28 @@ import { blobToBase64, decodeb64, buf2hex, getAddressFromDid, sleep } from "./in
 /** Initialize lit */
 let lit;
 let litReady = false;
-export function connectLit() {
+export async function connectLit() {
+  let ready;
   lit = new LitJsSdk.LitNodeClient({alertWhenUnauthorized: false})
-  lit.connect()
+  await lit.connect();
+  console.log("Lit is ready now!");
+  litReady = true;
+}
 
-  if(document) {
-    document.addEventListener('lit-ready', function (e) {
-      console.log('Lit is ready')
-      litReady = true;
-    }, false)
+/** temporary function to wait for Lit to be ready before decrypting conten */
+async function litIsReady() {
+  let ready;
+  console.log("Checking if Lit is ready...: " + litReady);
+
+  if(litReady == false) {
+    await sleep(1500);
+    ready = true;
+  } else {
+    ready = true;
   }
+  console.log("Lit is ready!: " + litReady);
+
+  return;
 }
 
 /** Requires user to sign a message which will generate the lit-signature */
@@ -67,9 +79,11 @@ function getAuthSig() {
   }
 }
 
-
 /** Decrypt a string using Lit based on a set of inputs. */
 export async function decryptString(encryptedContent) {
+  /** Make sure Lit is ready before trying to decrypt the string */
+  await litIsReady();
+
   /** Retrieve AuthSig */
   let authSig = getAuthSig();
 

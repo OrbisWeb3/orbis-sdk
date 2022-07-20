@@ -6,7 +6,7 @@ import { EthereumAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
 
 /** Lit Protocol */
 import LitJsSdk from 'lit-js-sdk'
-import { connectLit, generateLitSignature, generateAccessControlConditionsForDMs, encryptDM, decryptString } from "./utils/lit-helpers.js";
+import { connectLit, generateLitSignature, generateAccessControlConditionsForDMs, encryptDM, encryptPost, decryptString } from "./utils/lit-helpers.js";
 
 /** Internal helpers */
 import { indexer } from './lib/indexer-db.js';
@@ -15,6 +15,9 @@ import { forceIndex, forceIndexDid, sleep } from "./utils/index.js";
 /** Initiate the node URLs for the two networks */
 const MAINNET_NODE_URL = "https://node1.orbis.club/";
 const TESTNET_NODE_URL = "https://ceramic-clay.3boxlabs.com";
+
+/** Set schemas Commit IDs */
+const postSchemaCommitId = "k3y52l7qbv1fryn1brl9cvef0hilj561ooi6i3ac1l21rj2npron7nf2xneuace0w";
 
 /** Definition of the Orbis class powering the Orbis SDK */
 export class Orbis {
@@ -248,18 +251,34 @@ export class Orbis {
 	}
 
   /** Connected users can share a new post following our schemas */
-  async createPost(content) {
+  async createPost(content, encryptionRules = null) {
 		/** Make sure post isn't empty */
 		if(!content || !content.body || content.body == "" || content.body == undefined) {
 			return {
 				status: 300,
-				error: e,
 				result: "You can't share an empty post."
 			}
 		}
 
+		/** Check if posts should be encrypted  */
+		let _encryptedContent;
+		if(encryptionRules) {
+			try {
+				_encryptedContent = await encryptPost(encryptionRules, content.body);
+				content.encryptedBody = _encryptedContent;
+				content.body = "";
+			} catch(e) {
+				console.log("There was an error encrypting this post: ", e);
+				return {
+					status: 300,
+					error: e,
+					result: "There was an error encrypting this post."
+				}
+			}
+		}
+
 		/** Create tile with post schema */
-		let result = await this.createTileDocument(content, ["orbis", "post"], "k3y52l7qbv1frxtyq85ws7ql3v2027wgnok631zcnepapab2spdmdt1t3nlm41yio");
+		let result = await this.createTileDocument(content, ["orbis", "post"], postSchemaCommitId);
 
 		/** Return confirmation results */
 		return result;
@@ -488,6 +507,21 @@ export class Orbis {
 		/** Create tile for this message */
 		let result = await this.createTileDocument(_content, ["orbis", "message"], "k3y52l7qbv1fry9kw12vvvn52a0x16asq599y4vl1tt42kjd1ype4pw5fwuj3dkao");
 		return result;
+	}
+
+	/** Decrypt an encrypted post using Lit Protocol */
+	async decryptPost(content) {
+		let res;
+		try {
+			res = await decryptString(content.encryptedBody);
+			return res;
+		} catch(e) {
+			return {
+				status: 300,
+				error: e,
+				result: "Error decrypting post."
+			}
+		}
 	}
 
 	/** Decrypt a direct message using Lit Protocol */
