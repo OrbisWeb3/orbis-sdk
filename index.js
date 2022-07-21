@@ -17,7 +17,8 @@ const MAINNET_NODE_URL = "https://node1.orbis.club/";
 const TESTNET_NODE_URL = "https://ceramic-clay.3boxlabs.com";
 
 /** Set schemas Commit IDs */
-const postSchemaCommitId = "k3y52l7qbv1fryn1brl9cvef0hilj561ooi6i3ac1l21rj2npron7nf2xneuace0w";
+const postSchemaCommit = "k3y52l7qbv1fryn1brl9cvef0hilj561ooi6i3ac1l21rj2npron7nf2xneuace0w";
+const channelSchema = "k3y52l7qbv1fry19cf09hgx3lvrqjvqknpzj8ens7hh3xaz0pmu7kret3y7gqs1kw";
 
 /** Definition of the Orbis class powering the Orbis SDK */
 export class Orbis {
@@ -278,7 +279,7 @@ export class Orbis {
 		}
 
 		/** Create tile with post schema */
-		let result = await this.createTileDocument(content, ["orbis", "post"], postSchemaCommitId);
+		let result = await this.createTileDocument(content, ["orbis", "post"], postSchemaCommit);
 
 		/** Return confirmation results */
 		return result;
@@ -356,7 +357,22 @@ export class Orbis {
 		}
 
 		/** Create channel object */
-		let result = await this.createTileDocument(content, ["orbis", "channel"], "k3y52l7qbv1frykwglqnssisct9itj9wg76gxbkmagrrneiz0ul92nksde2fgii2o");
+		let result = await this.createTileDocument(content, ["orbis", "channel"], channelSchema);
+		return result;
+	}
+
+	/** User can update a channel */
+	async updateChannel(channel_id, content) {
+		if(!channel_id) {
+			console.log("`channel_id` is required to update a channel.");
+			return {
+				status: 300,
+				result: "`channel_id` is required to update a channel."
+			}
+		}
+
+		/** Update TileDocument with new content */
+		let result = await this.updateTileDocument(channel_id, content, ["orbis", "channel"], channelSchema);
 		return result;
 	}
 
