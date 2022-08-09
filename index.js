@@ -2,7 +2,7 @@
 import { CeramicClient } from '@ceramicnetwork/http-client';
 import { TileDocument } from '@ceramicnetwork/stream-tile';
 import { DIDSession } from '@glazed/did-session'
-import { EthereumAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
+import { EthereumAuthProvider, SolanaAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
 
 /** Lit Protocol */
 import LitJsSdk from 'lit-js-sdk'
@@ -17,8 +17,14 @@ const MAINNET_NODE_URL = "https://node1.orbis.club/";
 const TESTNET_NODE_URL = "https://ceramic-clay.3boxlabs.com";
 
 /** Set schemas Commit IDs */
-const postSchemaCommit = "k3y52l7qbv1fryn1brl9cvef0hilj561ooi6i3ac1l21rj2npron7nf2xneuace0w";
-const channelSchema = "k3y52l7qbv1fry19cf09hgx3lvrqjvqknpzj8ens7hh3xaz0pmu7kret3y7gqs1kw";
+const postSchemaStream = "kjzl6cwe1jw14b44gtfdmeyqi7oei5wv1721f352h0umfmb7k7eiihb3lurvtv8";
+const postSchemaCommit = "k1dpgaqe3i64kjzmj5ruz0sjw9ux0i878xztjdm6c62burw0zf3ew7snpgak2gnzx51c3yzc2s01iq3chsbu4fdi7tsmwc3oox1v1p2kkrzccq736k37m6jzx";
+
+const channelSchemaStream = "kjzl6cwe1jw1481vk3z30owkij3665fa33b54b7wjw7v4csscrvfuurpv8xaikh";
+const channelSchemaCommit = "k6zn3rc3v8qin14jvrfyxfhajtbjuqj1ae3v7cptbh4dp47lm9rrrta4bw26td7cvu2ixs5s9be21r6q0jn4i1eb7zvtz2ka3xt9059eochaq5a1ajobl16";
+
+const profileSchemaStream = "kjzl6cwe1jw147z3fd3tpwhnid3kroebsn9wimfawhcoe09thzudg43semys0dh";
+const profileSchemaCommit = "k3y52l7qbv1fry0pkd977c71j6l5fothvvpif8fgtize5flxtryvzml6y03bb6nsw";
 
 /** Definition of the Orbis class powering the Orbis SDK */
 export class Orbis {
@@ -217,6 +223,85 @@ export class Orbis {
 		}
 	}
 
+	/** Test function to check the status of the Solana provider */
+	async testConnectSolana() {
+		let provider;
+		if ('phantom' in window) {
+	    provider = window.phantom?.solana;
+	  } else {
+			console.log("Solana Provider: There isn't any Phantom wallet in this browser.");
+		}
+
+		const resp = await provider.connect();
+		let address = resp.publicKey.toString();
+		console.log("Solana Provider: Found: " + address);
+
+		/** Step 2: Create an authProvider object using the address connected */
+		let authProvider;
+		try {
+			authProvider = new SolanaAuthProvider(provider, address)
+		} catch(e) {
+			return {
+				status: 300,
+				error: e,
+				result: "Error creating Solana provider object for Ceramic."
+			}
+		}
+
+		/** Step 3: Create a new session for this did */
+		let did;
+		try {
+			this.session = new DIDSession({ authProvider })
+
+			/** Expire session in 30 days by default */
+			const expirationDate = new Date(Date.now() + 60 * 60 * 24 * 30 * 1000)
+			const expirationString = expirationDate.toISOString()
+			did = await this.session.authorize({expirationTime: expirationString})
+		} catch(e) {
+			return {
+				status: 300,
+				error: e,
+				result: "Error creating a session for the DiD."
+			}
+		}
+
+		/** Step 3 bis: Store session in localStorage to re-use
+		try {
+			const sessionString = this.session.serialize()
+			localStorage.setItem("ceramic-session", sessionString);
+		} catch(e) {
+			console.log("Error creating sessionString: " + e);
+		} */
+
+		/** Step 4: Assign did to Ceramic object  */
+		this.ceramic.did = did;
+		console.log("Connected to Ceramic using: " + this.session.id);
+
+		/** Step 6: Force index did to retrieve blockchain details automatically */
+		let _resDid = await forceIndexDid(this.session.id);
+
+		/** Step 7: Get user profile details */
+		let { data, error, status } = await this.getProfile(this.session.id);
+
+		let details;
+		if(data) {
+			details = data.details;
+		} else {
+			details = {
+				did: this.session.id,
+				profile: null
+			}
+		}
+
+		/** Return result */
+		return {
+			status: 200,
+			did: this.session.id,
+			details: details,
+			result: "Success connecting to the DiD."
+		}
+	}
+
 	/** Destroys the Ceramic session string stored in localStorage */
 	logout() {
 		try {
@@ -238,7 +323,7 @@ export class Orbis {
 	/** Update user profile */
 	async updateProfile(content) {
 		/** Create a new stream with those details */
-		let result = await this.createTileDocument(content, ["orbis", "profile"], "k3y52l7qbv1frxkhi9rm5y7wh48sbs8u39jwx8ufgd443awu5s8y0xufnbprp5qm8");
+		let result = await this.createTileDocument(content, ["orbis", "profile"], profileSchemaCommit);
 		return result;
 	}
 
@@ -280,6 +365,49 @@ export class Orbis {
 
 		/** Create tile with post schema */
 		let result = await this.createTileDocument(content, ["orbis", "post"], postSchemaCommit);
+
+		/** Return confirmation results */
+		return result;
+  }
+
+	/** Connected users can edit their post */
+  async editPost(stream_id, content, encryptionRules = null) {
+		/** Make sure post isn't empty */
+		if(!content || !content.body || content.body == "" || content.body == undefined) {
+			return {
+				status: 300,
+				result: "You can't share an empty post."
+			}
+		}
+
+		/** Check if posts should be encrypted  */
+		let _encryptedContent;
+		if(encryptionRules) {
+			try {
+				_encryptedContent = await encryptPost(encryptionRules, content.body);
+				content.encryptedBody = _encryptedContent;
+				content.body = "";
+			} catch(e) {
+				console.log("There was an error encrypting this post: ", e);
+				return {
+					status: 300,
+					error: e,
+					result: "There was an error encrypting this post."
+				}
+			}
+		}
+
+		/** Update tile with post schema */
+		let result = await this.updateTileDocument(stream_id, content, ["orbis", "post"], postSchemaCommit);
+
+		/** Return confirmation results */
+		return result;
+  }
+
+	/** Users can delete one of their post */
+	async deletePost(stream_id) {
+		/** Update tile with post schema */
+		let result = await this.updateTileDocument(stream_id, {is_deleted: true, body: ""}, ["orbis", "post"]);
 
 		/** Return confirmation results */
 		return result;
@@ -357,7 +485,7 @@ export class Orbis {
 		}
 
 		/** Create channel object */
-		let result = await this.createTileDocument(content, ["orbis", "channel"], channelSchema);
+		let result = await this.createTileDocument(content, ["orbis", "channel"], channelSchemaCommit);
 		return result;
 	}
 
@@ -372,7 +500,7 @@ export class Orbis {
 		}
 
 		/** Update TileDocument with new content */
-		let result = await this.updateTileDocument(channel_id, content, ["orbis", "channel"], channelSchema);
+		let result = await this.updateTileDocument(channel_id, content, ["orbis", "channel"], channelSchemaCommit);
 		return result;
 	}
 
@@ -697,6 +825,14 @@ export class Orbis {
 	*** API QUERIES ***
 	******************/
 
+	/** Check if a user already has active dids with this wallet address and returns profile details if any */
+	async getDids(address) {
+		let { data, error, status } = await this.api.from("orbis_v_profiles").select().ilike('address', address);
+
+		/** Return results */
+		return({ data, error, status });
+	}
+
 	/**
 	 * Retrieve posts shared in a specific context or by a specific user
 	 * Returns an array of posts in the `data` field or an `error`.
@@ -815,6 +951,14 @@ export class Orbis {
 		return({ data, error, status });
 	}
 
+	/** Get profiles matching the usernames passed as a parameter */
+	async getProfilesByUsername(username) {
+		let { data, error, status } = await this.api.from("orbis_v_profiles").select().ilike('username', username + "%").range(0, 10).order('timestamp', { ascending: false });
+
+		/** Return results */
+		return({ data, error, status });
+	}
+
 	/** Get groups memberships for a profile */
 	async getProfileGroups(did) {
 		let { data, error, status } = await this.api.from("orbis_user_groups").select().match({did: did, active: 'true'}).not('group_id',  "is", null);
@@ -823,18 +967,20 @@ export class Orbis {
 		return({ data, error, status });
 	}
 
-	/** Get list of users being followed by a specific did */
-	async getProfileFollowing(did) {
-		let { data, error, status } = await this.api.from("orbis_followers").select('did_followed').match({did_following: did, active: 'true'});
+	/** Get list of followers for a specific did */
+	async getProfileFollowers(did) {
+		let { data, error, status } = await this.api.from("orbis_v_followers").select('details:did_following_details').match({did_followed: did, active: 'true'});
 
 		/** Return results */
-		let _followed = [];
-		if(data) {
-			data.forEach((_follow, i) => {
-				_followed.push(_follow.did_followed);
-			});
-		}
-		return({ data: _followed, error, status });
+		return({ data, error, status });
+	}
+
+	/** Get list of users being followed by a specific did */
+	async getProfileFollowing(did) {
+		let { data, error, status } = await this.api.from("orbis_v_followers").select('details:did_followed_details').match({did_following: did, active: 'true'});
+
+		/** Return results */
+		return({ data, error, status });
 	}
 
 	/** Get conversationv2 details */
