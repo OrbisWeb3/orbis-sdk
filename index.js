@@ -840,8 +840,32 @@ export class Orbis {
 	async getPosts(options, page = 0) {
 		let query;
 
+		/** Default query for global feed, developers can pass an algorithm ID to order the posts */
+		if(options?.algorithm) {
+			switch (options.algorithm) {
+				case "recommendations":
+					query = this.api.rpc("orbis_recommendations", { user_did: this.session && this.session ? this.session.id : "none" }).range(page * 50, (page + 1) * 50 - 1);
+					break;
+				case "all-posts":
+					query = this.api.rpc("all_posts").range(page * 50, (page + 1) * 50 - 1);
+					break;
+				case "all-master-posts":
+					query = this.api.rpc("all_master_posts").range(page * 50, (page + 1) * 50 - 1);
+					break;
+				case "all-context-master-posts":
+					query = this.api.rpc("all_context_master_posts", { post_context: options?.context }).range(page * 50, (page + 1) * 50 - 1);
+					break;
+				case "all-posts-non-filtered":
+					query = this.api.rpc("all_posts_non_filtered").range(page * 50, (page + 1) * 50 - 1);
+					break;
+				default:
+					query = this.api.from("orbis_v_posts").select().range(page * 50, (page + 1) * 50 - 1).order('timestamp', { ascending: false });
+					break;
+			}
+		}
+
 		/** If user is querying posts from a specific did within a specific context */
-		if(options?.context && options?.did) {
+		else if(options?.context && options?.did) {
 			query = this.api.from("orbis_v_posts").select().eq('context', options.context).eq('creator', options.did).range(page * 50, (page + 1) * 50 - 1).order('timestamp', { ascending: false });
 		}
 
@@ -860,26 +884,8 @@ export class Orbis {
 			query = this.api.from("orbis_v_posts").select().eq('master', options.master).range(page * 200, (page + 1) * 200 - 1).order('timestamp', { ascending: true });
 		}
 
-		/** Default query for global feed, developers can pass an algorithm ID to order the posts */
 		else {
-			if(options?.algorithm) {
-				switch (options.algorithm) {
-					case "recommendations":
-						query = this.api.rpc("orbis_recommendations", { user_did: this.session && this.session ? this.session.id : "none" }).range(page * 50, (page + 1) * 50 - 1);
-						break;
-					case "all-posts":
-						query = this.api.rpc("all_posts").range(page * 50, (page + 1) * 50 - 1);
-						break;
-					case "all-posts-non-filtered":
-						query = this.api.rpc("all_posts_non_filtered").range(page * 50, (page + 1) * 50 - 1);
-						break;
-					default:
-						query = this.api.from("orbis_v_posts").select().range(page * 50, (page + 1) * 50 - 1).order('timestamp', { ascending: false });
-						break;
-				}
-			} else {
-				query = this.api.from("orbis_v_posts").select().range(page * 50, (page + 1) * 50 - 1).order('timestamp', { ascending: false });
-			}
+			 query = this.api.from("orbis_v_posts").select().range(page * 50, (page + 1) * 50 - 1).order('timestamp', { ascending: false });
 		}
 
 		/** Query indexer */
