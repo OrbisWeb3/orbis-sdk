@@ -1,7 +1,7 @@
 /** Ceramic */
 import { CeramicClient } from '@ceramicnetwork/http-client';
 import { TileDocument } from '@ceramicnetwork/stream-tile';
-import { DIDSession } from '@glazed/did-session'
+import { DIDSession } from 'did-session'
 import { EthereumAuthProvider, SolanaAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
 
 /** Lit Protocol */
@@ -25,6 +25,24 @@ const channelSchemaCommit = "k6zn3rc3v8qin14jvrfyxfhajtbjuqj1ae3v7cptbh4dp47lm9r
 
 const profileSchemaStream = "kjzl6cwe1jw147z3fd3tpwhnid3kroebsn9wimfawhcoe09thzudg43semys0dh";
 const profileSchemaCommit = "k3y52l7qbv1fry0pkd977c71j6l5fothvvpif8fgtize5flxtryvzml6y03bb6nsw";
+
+const reactionSchemaStream = "kjzl6cwe1jw14a1xm07lqfrpoi25nleamzakwbxp3qyh1ndxe6y2ha1i2stt9pk";
+const reactionSchemaCommit = "k3y52l7qbv1fryfhr0hi2k052m8fc7s5nnez8lwvminp57qb1gxe9mveojx0051q8";
+
+const followSchemaStream = "kjzl6cwe1jw146qqj9wfuzefr74q84v2mcoszkmdqgcv34r3b6z4c6o2s8mrd4m";
+const followSchemaCommit = "k3y52l7qbv1frxry4p2eosbqo1epmhukymy8e4yn5o4bh29snjllqunf7stdulcsg";
+
+const groupMemberSchemaStream = "kjzl6cwe1jw147b0vp4b9axd7eb6wntvnvbsvqkq5czlpaumirbzoxz3rmof4qc";
+const groupMemberSchemaCommit = "k3y52l7qbv1frxvye9emo25p9wlrl49gh5qrxdozdy4d6bx5s5ed9tdlmsh9nln9c";
+
+const conversationSchemaStream = "kjzl6cwe1jw149zcbbtuurfb60l26wrf49uxntln6zuagk4140dtpcevub8o4ac";
+const conversationSchemaCommit = "k3y52l7qbv1fryezbkk4ber0ves5rl4yzie3zdehwxqvedr0nwiqb889ufjxnihhc";
+
+const messageSchemaStream = "kjzl6cwe1jw147amc7t931duuxwixltfss7uft7aa4cw7ik4dquprfs2bsgkeso";
+const messageSchemaCommit = "k3y52l7qbv1frxvviuvk0llujg13amz5cconsgfnt3yzp1fz35qyf747kjudt57uo";
+
+const notificationsReadSchemaStream = "kjzl6cwe1jw147y7iul21b8xce0h2w0gz4favuj8d9ybxhlwn9lyrnc0t3dbtf4"
+const notificationsReadSchemaCommit = "k3y52l7qbv1fry0j9i1hqhbzh43ndgjncprgteh4ries4u57s5gc78lxhqvys17gg"
 
 /** Definition of the Orbis class powering the Orbis SDK */
 export class Orbis {
@@ -65,7 +83,7 @@ export class Orbis {
 	}
 
   /** The connect function will connect to an EVM wallet and create or connect to a Ceramic did */
-  async connect(provider) {
+  async connect(provider, lit = true) {
 
 		/** If provider isn't passed we use window.ethereum */
 		if(!provider) {
@@ -105,12 +123,17 @@ export class Orbis {
 		/** Step 3: Create a new session for this did */
 		let did;
 		try {
-			this.session = new DIDSession({ authProvider })
-
 			/** Expire session in 30 days by default */
-			const expirationDate = new Date(Date.now() + 60 * 60 * 24 * 30 * 1000)
-			const expirationString = expirationDate.toISOString()
-			did = await this.session.authorize({expirationTime: expirationString})
+			const oneMonth = 60 * 60 * 24 * 31;
+
+			this.session = await DIDSession.authorize(
+				authProvider,
+				{
+					resources: [`ceramic://*`],
+					expiresInSecs: oneMonth
+				}
+			);
+			did = this.session.did;
 		} catch(e) {
 			return {
 				status: 300,
@@ -130,18 +153,20 @@ export class Orbis {
 		/** Step 4: Assign did to Ceramic object  */
 		this.ceramic.did = did;
 
-		/** Step 5: Initialize the connection to Lit */
-		let _userAuthSig = localStorage.getItem("lit-auth-signature-" + addresses[0]);
-		if(!_userAuthSig || _userAuthSig == "" || _userAuthSig == undefined) {
-			try {
-				/** Generate the signature for Lit */
-				let resLitSig = await generateLitSignature(provider, addresses[0]);
-			} catch(e) {
-				console.log("Error connecting to Lit network: " + e);
+		/** Step 5 (optional): Initialize the connection to Lit */
+		if(lit == true) {
+			let _userAuthSig = localStorage.getItem("lit-auth-signature-" + addresses[0]);
+			if(!_userAuthSig || _userAuthSig == "" || _userAuthSig == undefined) {
+				try {
+					/** Generate the signature for Lit */
+					let resLitSig = await generateLitSignature(provider, addresses[0]);
+				} catch(e) {
+					console.log("Error connecting to Lit network: " + e);
+				}
+			} else {
+				/** User is already connected, save current accoutn signature in lit-auth-signature object for easy retrieval */
+				localStorage.setItem("lit-auth-signature", _userAuthSig);
 			}
-		} else {
-			/** User is already connected, save current accoutn signature in lit-auth-signature object for easy retrieval */
-			localStorage.setItem("lit-auth-signature", _userAuthSig);
 		}
 
 		/** Step 6: Force index did to retrieve blockchain details automatically */
@@ -195,7 +220,7 @@ export class Orbis {
 
 		/** Session is still valid, connect */
 		try {
-			this.ceramic.did = this.session.getDID();
+			this.ceramic.did = this.session.did;
 		} catch(e) {
 			console.log("Error assigning did to Ceramic object: " + e);
 			return false;
@@ -330,7 +355,7 @@ export class Orbis {
 	/** Save the last read time for notifications for the connected user */
 	async setNotificationsReadTime(type, timestamp) {
 		/** Create tile with the settings details */
-		let result = await this.createTileDocument({last_notifications_read_time: timestamp}, ["orbis", "settings", "notifications", type], "k3y52l7qbv1frykd0d0oyarndssmdfyxnuwt8v6da20i7pubplopd76mzndsf6hhc");
+		let result = await this.createTileDocument({last_notifications_read_time: timestamp}, ["orbis", "settings", "notifications", type], notificationsReadSchemaCommit);
 
 		/** Return confirmation results */
 		return result;
@@ -438,7 +463,7 @@ export class Orbis {
 		}
 
 		/** Try to create the stream and return the result */
-		let result = await this.createTileDocument(content, ["orbis", "reaction"], "k3y52l7qbv1frxuh68tbxjkp88bc37jc7p0thipi36nhhpgtb7r2ekimtudfbt9ts");
+		let result = await this.createTileDocument(content, ["orbis", "reaction"], reactionSchemaCommit);
 		return result;
 	}
 
@@ -522,7 +547,7 @@ export class Orbis {
 		}
 
 		/** Try to create the stream */
-		let result = await this.createTileDocument(content, ["orbis", "group_member"], "k3y52l7qbv1frxy7omau0nf3w6mlc482iqog83e5utihk7pntqfpvpiintkiosg74");
+		let result = await this.createTileDocument(content, ["orbis", "group_member"], groupMemberSchemaCommit);
 		return result;
 	}
 
@@ -544,7 +569,7 @@ export class Orbis {
 		}
 
 		/** Try to create the stream */
-		let result = await this.createTileDocument(content, ["orbis", "follow"], "k3y52l7qbv1fry1x6vtd1396nvf1nljn62vfirvol5deahbl41rygx6ceo0cex9ts");
+		let result = await this.createTileDocument(content, ["orbis", "follow"], followSchemaCommit);
 		return result;
 	}
 
@@ -585,7 +610,7 @@ export class Orbis {
 		recipients.push(this.session.id);
 
 		/** Create tile */
-		let result = await this.createTileDocument(_content, ["orbis", "conversation"], "k3y52l7qbv1frypruvvdaho7nnkc5d2s0hqq0uokxbg9wga7mnqv8ci5bdv13latc");
+		let result = await this.createTileDocument(_content, ["orbis", "conversation"], conversationSchemaCommit);
 
 		/** Return confirmation results */
 		return result;
@@ -649,7 +674,7 @@ export class Orbis {
 		}
 
 		/** Create tile for this message */
-		let result = await this.createTileDocument(_content, ["orbis", "message"], "k3y52l7qbv1fry9kw12vvvn52a0x16asq599y4vl1tt42kjd1ype4pw5fwuj3dkao");
+		let result = await this.createTileDocument(_content, ["orbis", "message"], messageSchemaCommit);
 		return result;
 	}
 
@@ -696,7 +721,7 @@ export class Orbis {
 	**********************/
 
 	/** Helper to create a basic TileDocument on Ceramic */
-	async createTileDocument(content, tags, schema) {
+	async createTileDocument(content, tags, schema, family = "orbis") {
 		let res;
 
 		/** Try to create TileDocument */
@@ -707,7 +732,7 @@ export class Orbis {
 				content,
 				/** Metadata */
 				{
-					family: 'orbis',
+					family: family,
 					controllers: [this.session.id],
 					tags: tags,
 					schema: schema
@@ -737,7 +762,7 @@ export class Orbis {
 	}
 
 	/** Helper to update an existing TileDocument */
-	async updateTileDocument(stream_id, content, tags, schema) {
+	async updateTileDocument(stream_id, content, tags, schema, family = "orbis") {
 		let res;
 
 		/** Try to update existing Ceramic document */
@@ -745,7 +770,7 @@ export class Orbis {
 		try {
 			doc = await TileDocument.load(this.ceramic, stream_id);
 			await doc.update(content, {
-				family: 'orbis',
+				family: family,
 				controllers: [this.session.id],
 				tags: tags,
 				schema: schema
@@ -774,7 +799,7 @@ export class Orbis {
 	}
 
 	/** Helper to create a deterministic TileDocument on Ceramic */
-	async deterministicDocument(content, tags, schema) {
+	async deterministicDocument(content, tags, schema, family = "orbis") {
 		let res;
 
 		/** Try to create/update a deterministic TileDocument */
@@ -783,7 +808,7 @@ export class Orbis {
 			const doc = await TileDocument.deterministic(
 	        this.ceramic,
 					{
-						family: 'orbis',
+						family: family,
 						controllers: [this.session.id],
 						tags: tags
 					}
@@ -793,7 +818,7 @@ export class Orbis {
 	    await doc.update(
 				content,
 				{
-					family: 'orbis',
+					family: family,
 					controllers: [this.session.id],
 					tags: tags
 				});
@@ -987,6 +1012,20 @@ export class Orbis {
 
 		/** Return results */
 		return({ data, error, status });
+	}
+
+	/** Check if a user is already following another user and returns a boolean */
+	async getIsFollowing(did_following, did_followed) {
+		let res = false;
+		let { data, error, status } = await this.api.from("orbis_v_followers").select().match({did_following: did_following, did_followed: did_followed, active: 'true'});
+
+		/** Returns `true` if data isn't empty */
+		if(data && data.length > 0) {
+			res = true;
+		}
+
+		/** Return results */
+		return({ data: res, error, status });
 	}
 
 	/** Get conversationv2 details */

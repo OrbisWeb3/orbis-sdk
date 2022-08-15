@@ -1,23 +1,31 @@
 {
   "name": "@orbisclub/orbis-sdk",
-  "version": "0.2.76",
+  "version": "0.2.98",
   "description": "Official package to implement quickly an Orbis powered decentralized social layer within your application.",
+  "author": "Baptiste Grève",
+  "license": "ISC",
   "type": "module",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Baptiste Grève",
-  "license": "ISC",
+  "babel": {
+    "presets": [
+      "@babel/preset-react"
+    ]
+  },
+  "eslintConfig": {
+    "extends": "react-app"
+  },
   "dependencies": {
-    "@ceramicnetwork/blockchain-utils-linking": "^2.0.4",
-    "@ceramicnetwork/http-client": "^2.0.4",
-    "@ceramicnetwork/stream-tile": "^2.1.3",
+    "@ceramicnetwork/blockchain-utils-linking": "^2.0.8",
+    "@ceramicnetwork/http-client": "^2.3.1",
+    "@ceramicnetwork/stream-tile": "^2.4.0",
     "@ethersproject/bytes": "^5.6.1",
     "@ethersproject/strings": "^5.6.1",
-    "@glazed/did-session": "^0.1.1",
     "@supabase/supabase-js": "^1.35.3",
     "buffer": "^6.0.3",
+    "did-session": "^0.1.1",
     "dids": "^3.2.0",
     "key-did-provider-ed25519": "^2.0.0",
     "key-did-resolver": "^2.0.4",
