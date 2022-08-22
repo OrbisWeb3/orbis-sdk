@@ -20,6 +20,9 @@ const TESTNET_NODE_URL = "https://ceramic-clay.3boxlabs.com";
 const postSchemaStream = "kjzl6cwe1jw145vf8e3qu3bdm9o4wbe1x9tnq197re4knsywt0e9e8a49phe75n";
 const postSchemaCommit = "k3y52l7qbv1frxlrgboamtzkwucrmtszxoluwp4xj6sgixa09aatet6vyd17oyw3k";
 
+const groupSchemaStream = "kjzl6cwe1jw145mgwnp562fyppm4ckwonrd2ghnhge9g3ztd6wmiwgyqu7ngk67";
+const groupSchemaCommit = "k3y52l7qbv1frxjzs88isr5diuu5axgofcykxh9j04lf6keott406ewn2uuetrg1s";
+
 const channelSchemaStream = "kjzl6cwe1jw14aiqo5jzao1pb9vnw9zcaown9f524ohdb9wvm06zslvwtmjvqpp";
 const channelSchemaCommit = "k3y52l7qbv1fryit9nri2zv040695xizbg145eznz5a3io6hsshdqjfmxeoddpyps";
 
@@ -476,7 +479,7 @@ export class Orbis {
 	/** Users can create or update a new group which can be used as a context when sharing posts */
 	async createGroup(content) {
 		/** Try to create a new Orbis group stream */
-		let result = await this.createTileDocument(content, ["orbis", "group"], "k3y52l7qbv1frxlke0x7wquudb9q00d6fsatbobub6in3yvim5x6r9cnjbi0i0phc");
+		let result = await this.createTileDocument(content, ["orbis", "group"], groupSchemaCommit);
 
 		/** If group creation was successful we also create the first channel */
 		if(result.doc) {
@@ -590,7 +593,7 @@ export class Orbis {
 		}
 
 		/** Update TileDocument with new content */
-		let result = await this.updateTileDocument(stream_id, content, ["orbis", "group"], "k3y52l7qbv1frxlke0x7wquudb9q00d6fsatbobub6in3yvim5x6r9cnjbi0i0phc");
+		let result = await this.updateTileDocument(stream_id, content, ["orbis", "group"], groupSchemaCommit);
 		return result;
 	}
 
