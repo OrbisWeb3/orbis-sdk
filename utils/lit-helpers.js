@@ -81,6 +81,7 @@ function getAuthSig() {
 
 /** Decrypt a string using Lit based on a set of inputs. */
 export async function decryptString(encryptedContent) {
+  console.log("Enter decryptString");
   /** Make sure Lit is ready before trying to decrypt the string */
   await litIsReady();
 
@@ -91,6 +92,7 @@ export async function decryptString(encryptedContent) {
   let decodedString;
   try {
     decodedString = decodeb64(encryptedContent.encryptedString);
+    console.log("decryptString(): decodedString:", decodedString);
   } catch(e) {
     console.log("Error decoding b64 string: ", e);
     throw new Error(e);
@@ -120,7 +122,9 @@ export async function decryptString(encryptedContent) {
 
   /** Decrypt the string using the encryption key */
   try {
-      const decryptedString = await LitJsSdk.decryptString(new Blob([decodedString]), decryptedSymmKey);
+      let _blob = new Blob([decodedString]);
+      console.log("decryptString(): _blob:", _blob);
+      const decryptedString = await LitJsSdk.decryptString(_blob, decryptedSymmKey);
       return {
         status: 200,
         result: decryptedString

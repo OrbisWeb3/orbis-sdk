@@ -1,6 +1,6 @@
 {
   "name": "@orbisclub/orbis-sdk",
-  "version": "0.2.98",
+  "version": "0.3.03",
   "description": "Official package to implement quickly an Orbis powered decentralized social layer within your application.",
   "author": "Baptiste Grève",
   "license": "ISC",
