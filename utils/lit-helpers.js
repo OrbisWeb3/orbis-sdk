@@ -6,7 +6,7 @@ import { blobToBase64, decodeb64, buf2hex, getAddressFromDid, sleep } from "./in
 /** Initialize lit */
 let lit;
 let litReady = false;
-export async function connectLit() {
+export async function connectLitClient() {
   let ready;
   lit = new LitJsSdk.LitNodeClient({alertWhenUnauthorized: false})
   await lit.connect();

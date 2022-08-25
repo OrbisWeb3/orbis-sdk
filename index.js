@@ -6,7 +6,7 @@ import { EthereumAuthProvider, SolanaAuthProvider } from '@ceramicnetwork/blockc
 
 /** Lit Protocol */
 import LitJsSdk from 'lit-js-sdk'
-import { connectLit, generateLitSignature, generateAccessControlConditionsForDMs, encryptDM, encryptPost, decryptString } from "./utils/lit-helpers.js";
+import { connectLitClient, generateLitSignature, generateAccessControlConditionsForDMs, encryptDM, encryptPost, decryptString } from "./utils/lit-helpers.js";
 
 /** Internal helpers */
 import { indexer } from './lib/indexer-db.js';
@@ -82,7 +82,7 @@ export class Orbis {
 		this.api = indexer;
 
 		/** Connect to Lit */
-		connectLit();
+		connectLitClient();
 	}
 
   /** The connect function will connect to an EVM wallet and create or connect to a Ceramic did */
@@ -179,12 +179,21 @@ export class Orbis {
 		/** Step 7: Get user profile details */
 		let { data, error, status } = await this.getProfile(this.session.id);
 
+		/** Check if user has configured Lit */
+		let hasLit = false;
+		let hasLitSig = localStorage.getItem("lit-auth-signature");
+		if(hasLitSig) {
+			hasLit = true;
+		}
+
 		let details;
 		if(data) {
 			details = data.details;
+			details.hasLit = hasLit;
 		} else {
 			details = {
 				did: this.session.id,
+				hasLit: hasLit,
 				profile: null
 			}
 		}
@@ -233,12 +242,21 @@ export class Orbis {
 		/** Step 6: Get user profile details */
 		let { data, error, status } = await this.getProfile(this.session.id);
 
+		/** Check if user has configured Lit */
+		let hasLit = false;
+		let hasLitSig = localStorage.getItem("lit-auth-signature");
+		if(hasLitSig) {
+			hasLit = true;
+		}
+
 		let details;
 		if(data) {
 			details = data.details;
+			details.hasLit = hasLit;
 		} else {
 			details = {
 				did: this.session.id,
+				hasLit: hasLit,
 				profile: null
 			}
 		}
@@ -249,6 +267,65 @@ export class Orbis {
 			did: this.session.id,
 			details: details,
 			result: "Success re-connecting to the DiD."
+		}
+	}
+
+	/** Connect to Lit only (usually in the case the lit signature wasn't generated in the first place) */
+	async connectLit(provider, address) {
+		/** Require address */
+		if(!address) {
+			return {
+				status: 300,
+				result: "You must pass the address as a parameter in the connectLit function."
+			}
+		}
+
+		/** If provider isn't passed we use window.ethereum */
+		if(!provider) {
+			if(window.ethereum) {
+				console.log("Orbis SDK: You need to pass the provider as an argument in the `connect()` function. We will be using window.ethereum by default.");
+				provider = window.ethereum;
+			} else {
+				alert("An ethereum provider is required to proceed with the connection to Lit Protocol.");
+				return {
+					status: 300,
+					error: e,
+					result: "An ethereum provider is required to proceed with the connection to Lit Protocol."
+				}
+			}
+		}
+
+		/** Step 1: Enable Ethereum provider (can be browser wallets or WalletConnect for now) */
+		let addresses;
+		try {
+			addresses = await provider.enable();
+		} catch(e) {
+			return {
+				status: 300,
+				error: e,
+				result: "Error enabling Ethereum provider."
+			}
+		}
+
+		/** Step 2: Initialize the connection to Lit */
+		try {
+			/** Generate the signature for Lit */
+			let resLitSig = await generateLitSignature(provider, address);
+
+			/** Return success state */
+			return {
+				status: 200,
+				result: "Generate Lit signature for address: " + address
+			}
+		} catch(e) {
+			console.log("Error connecting to Lit network: " + e);
+
+			/** Return result */
+			return {
+				status: 300,
+				error: e,
+				result: "Error generating Lit signature."
+			}
 		}
 	}
 
@@ -340,6 +417,7 @@ export class Orbis {
 	logout() {
 		try {
 			localStorage.removeItem("ceramic-session");
+			localStorage.removeItem("lit-auth-signature");
 			return {
 				status: 200,
 				result: "Logged out from Orbis and Ceramic."
@@ -487,14 +565,14 @@ export class Orbis {
 			/** Automatically join group created */
 			let joinRes = await this.setGroupMember(result.doc, true);
 
-			let channel_content = {
+			/**let channel_content = {
 				group_id: result.doc,
 				name: "general",
 				type: "feed"
 			};
 
-			/** Create a new stream for the channel */
-			let channel_result = await this.createChannel(result.doc, channel_content);
+			/** Create a new stream for the channel
+			let channel_result = await this.createChannel(result.doc, channel_content);*/
 
 			/** Return result */
 			return result;
