@@ -1,5 +1,10 @@
 import { Buffer } from 'buffer';
 
+/** To generate dids from a Seed */
+import { DID } from 'dids'
+import { Ed25519Provider } from 'key-did-provider-ed25519'
+import { getResolver } from 'key-did-resolver'
+
 /** Force index a stream. This shouldn't be necessary because our indexer picks up all new streams automatically but at least we are 100% sure. */
 export async function forceIndex(stream_id) {
   const requestOptions = {
@@ -18,6 +23,13 @@ export async function forceIndex(stream_id) {
     console.log("Error indexing new stream: ", e);
     return;
   }
+}
+
+/** Generate a random seed that can be used to authenticate a new did:key */
+export function randomSeed() {
+  const buffer = new Uint8Array(32);
+  let seedCrypto = crypto.getRandomValues(buffer);
+  return seedCrypto;
 }
 
 /** Force index a did to retrieve blockchain details such as nonces and ens name. */
@@ -86,7 +98,6 @@ export function blobToBase64(blob) {
     const reader = new FileReader();
     reader.onloadend = () =>
     resolve(
-        // @ts-ignore
         reader.result.replace("data:application/octet-stream;base64,", "")
     );
     reader.readAsDataURL(blob);

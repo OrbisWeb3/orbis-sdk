@@ -4,48 +4,53 @@ import { TileDocument } from '@ceramicnetwork/stream-tile';
 import { DIDSession } from 'did-session'
 import { EthereumAuthProvider, SolanaAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
 
+/** To generate dids from a Seed */
+import { DID } from 'dids'
+import { Ed25519Provider } from 'key-did-provider-ed25519'
+import { getResolver } from 'key-did-resolver'
+
 /** Lit Protocol */
 import LitJsSdk from 'lit-js-sdk'
-import { connectLitClient, generateLitSignature, generateAccessControlConditionsForDMs, encryptDM, encryptPost, decryptString } from "./utils/lit-helpers.js";
+import { connectLitClient, generateLitSignature, generateLitSignatureV2, generateAccessControlConditionsForDMs, encryptDM, encryptPost, decryptString } from "./utils/lit-helpers.js";
 
 /** Internal helpers */
 import { indexer } from './lib/indexer-db.js';
-import { forceIndex, forceIndexDid, sleep } from "./utils/index.js";
+import { forceIndex, forceIndexDid, sleep, randomSeed } from "./utils/index.js";
 
 /** Initiate the node URLs for the two networks */
 const MAINNET_NODE_URL = "https://node1.orbis.club/";
 const TESTNET_NODE_URL = "https://ceramic-clay.3boxlabs.com";
 
 /** Set schemas Commit IDs */
-const postSchemaStream = "kjzl6cwe1jw145vf8e3qu3bdm9o4wbe1x9tnq197re4knsywt0e9e8a49phe75n";
-const postSchemaCommit = "k3y52l7qbv1frxlrgboamtzkwucrmtszxoluwp4xj6sgixa09aatet6vyd17oyw3k";
+const postSchemaStream = "kjzl6cwe1jw1498inegtpji0iqf0htspb0qqswlofjy0hak1s3u2pf19qql7oak";
+const postSchemaCommit = "k3y52l7qbv1fry9okmevn9mo3p7urirw3yda6lju5qltvez2knv9v8qx1a52ukr28";
 
-const groupSchemaStream = "kjzl6cwe1jw145mgwnp562fyppm4ckwonrd2ghnhge9g3ztd6wmiwgyqu7ngk67";
-const groupSchemaCommit = "k3y52l7qbv1frxjzs88isr5diuu5axgofcykxh9j04lf6keott406ewn2uuetrg1s";
+const groupSchemaStream = "kjzl6cwe1jw1487a0xluwl3ip6lcdcfn8ahgomsbf8x5rf65mktdjuouz8xopbf";
+const groupSchemaCommit = "k3y52l7qbv1fry2bramzfrq10z2vrywf96yk6n61d8ffsyzvs0k0wd68sanjjo16o";
 
-const channelSchemaStream = "kjzl6cwe1jw14aiqo5jzao1pb9vnw9zcaown9f524ohdb9wvm06zslvwtmjvqpp";
-const channelSchemaCommit = "k3y52l7qbv1fryit9nri2zv040695xizbg145eznz5a3io6hsshdqjfmxeoddpyps";
+const channelSchemaStream = "kjzl6cwe1jw148ehiqrzh9npfr4kk4kyqd4as259yqzcr3i1dnrnm30ck5q0t6f";
+const channelSchemaCommit = "k3y52l7qbv1fry3r0laf0asokw0wi74l2zhaknj9iv3veoow9t50nx1ehbcp1rhmo";
 
-const profileSchemaStream = "kjzl6cwe1jw147z3fd3tpwhnid3kroebsn9wimfawhcoe09thzudg43semys0dh";
-const profileSchemaCommit = "k3y52l7qbv1fry0pkd977c71j6l5fothvvpif8fgtize5flxtryvzml6y03bb6nsw";
+const profileSchemaStream = "kjzl6cwe1jw145ak5a52cln1i6ztmece01w5qd03dib4lg8i3tt57sjauu14be8";
+const profileSchemaCommit = "k3y52l7qbv1frxhn39k40plvupdqqna03kdgorggo0274ojggr7z93ex979jyp14w";
 
-const reactionSchemaStream = "kjzl6cwe1jw14a1xm07lqfrpoi25nleamzakwbxp3qyh1ndxe6y2ha1i2stt9pk";
-const reactionSchemaCommit = "k3y52l7qbv1fryfhr0hi2k052m8fc7s5nnez8lwvminp57qb1gxe9mveojx0051q8";
+const reactionSchemaStream = "kjzl6cwe1jw146a2jirsoiku1eqsckmk8o7egba22jufwenwbb9fs096s340efk";
+const reactionSchemaCommit = "k3y52l7qbv1frxonm2thnyc45m0uhleofxo4ms07iq54h2g9xsg3475tc7q4iumm8";
 
-const followSchemaStream = "kjzl6cwe1jw146qqj9wfuzefr74q84v2mcoszkmdqgcv34r3b6z4c6o2s8mrd4m";
-const followSchemaCommit = "k3y52l7qbv1frxry4p2eosbqo1epmhukymy8e4yn5o4bh29snjllqunf7stdulcsg";
+const followSchemaStream = "kjzl6cwe1jw14av566q7ja9a2jy78uv5ih7pa683ozdulkpsc46qwsxfqzz3po5";
+const followSchemaCommit = "k3y52l7qbv1fryl9grzudl4xzm5v7izhj7eersc9m9nmhlfbdi5rzd9przztmejnk";
 
-const groupMemberSchemaStream = "kjzl6cwe1jw147b0vp4b9axd7eb6wntvnvbsvqkq5czlpaumirbzoxz3rmof4qc";
-const groupMemberSchemaCommit = "k3y52l7qbv1frxvye9emo25p9wlrl49gh5qrxdozdy4d6bx5s5ed9tdlmsh9nln9c";
+const groupMemberSchemaStream = "kjzl6cwe1jw146jk7s8ls9bjql42yqn1j5d3z0meue1zkgxeq2drqr0nl43soi8";
+const groupMemberSchemaCommit = "k3y52l7qbv1frxqj3rct6wya4d25131fuw65890fdk3y4xkdkpcxxa84nq56zy9kw";
 
-const conversationSchemaStream = "kjzl6cwe1jw149zcbbtuurfb60l26wrf49uxntln6zuagk4140dtpcevub8o4ac";
-const conversationSchemaCommit = "k3y52l7qbv1fryezbkk4ber0ves5rl4yzie3zdehwxqvedr0nwiqb889ufjxnihhc";
+const conversationSchemaStream = "kjzl6cwe1jw149ibyxllm19uiqvaj4gj2f84lq3y3xzs0nqpo2ufw63ut3xwn7i";
+const conversationSchemaCommit = "k3y52l7qbv1frybmd4exlop211b2ivzpjl89sqho2k1qf8otyj88h0rff301451c0";
 
-const messageSchemaStream = "kjzl6cwe1jw147amc7t931duuxwixltfss7uft7aa4cw7ik4dquprfs2bsgkeso";
-const messageSchemaCommit = "k3y52l7qbv1frxvviuvk0llujg13amz5cconsgfnt3yzp1fz35qyf747kjudt57uo";
+const messageSchemaStream = "kjzl6cwe1jw14bcux0xa3ba15686iwkw78y4xda0djl58ufyq219e116ihujfh8";
+const messageSchemaCommit = "k3y52l7qbv1fryorfuuknrk7c4sa6efokzjmr1af6obadawhixagyrrcebix662gw";
 
-const notificationsReadSchemaStream = "kjzl6cwe1jw147y7iul21b8xce0h2w0gz4favuj8d9ybxhlwn9lyrnc0t3dbtf4"
-const notificationsReadSchemaCommit = "k3y52l7qbv1fry0j9i1hqhbzh43ndgjncprgteh4ries4u57s5gc78lxhqvys17gg"
+const notificationsReadSchemaStream = "kjzl6cwe1jw14a4hg7d96srbp4tm2lox68ry6uv4m0m3pfsjztxx4pe6rliqquu"
+const notificationsReadSchemaCommit = "k3y52l7qbv1fryfzw38e9ccib6qakyi97weer4rhcskd6cwb26sx7lgkw491a6z9c"
 
 /** Definition of the Orbis class powering the Orbis SDK */
 export class Orbis {
@@ -111,9 +116,24 @@ export class Orbis {
 			}
 		}
 
-		/** Step 2: Create an authProvider object using the address connected */
+		/** Step 2: Check if user already has an active account on Orbis */
 		let authProvider;
 		let address = addresses[0].toLowerCase();
+		/*let {data: existingDids, error: errorDids}  = await getDids(address);
+		if(errorDids) {
+			console.log("Error retrieving existing dids: ", errorDids);
+		}
+		if(existingDids && existingDids.length > 0) {
+			let _didArr = existingDids[0].did.split(":");
+			let default_network = _didArr[2];
+			if(default_network == "eip155") {
+				let default_chain = _didArr[3];
+				console.log("Default chain to use: ", default_chain);
+			}
+		} else {
+		}*/
+
+		/** Step 2: Create an authProvider object using the address connected */
 		try {
 			authProvider = new EthereumAuthProvider(provider, address)
 		} catch(e) {
@@ -239,7 +259,10 @@ export class Orbis {
 			return false;
 		}
 
-		/** Step 6: Get user profile details */
+		/** Step 6: Force index did to retrieve blockchain details automatically */
+		let _resDid = await forceIndexDid(this.session.id);
+
+		/** Step 7: Get user profile details */
 		let { data, error, status } = await this.getProfile(this.session.id);
 
 		/** Check if user has configured Lit */
@@ -310,7 +333,7 @@ export class Orbis {
 		/** Step 2: Initialize the connection to Lit */
 		try {
 			/** Generate the signature for Lit */
-			let resLitSig = await generateLitSignature(provider, address);
+			let resLitSig = await generateLitSignatureV2(provider, address);
 
 			/** Return success state */
 			return {
@@ -429,7 +452,32 @@ export class Orbis {
 				result: "Error logging out."
 			}
 		}
+	}
 
+	/** Authenticate a did with a seed */
+	async connectWithSeed(seed) {
+		/** Create the provider and resolve it */
+		const provider = new Ed25519Provider(seed)
+	  const did = new DID({ provider, resolver: getResolver() })
+
+		/** Authenticate the Did */
+		await did.authenticate()
+		console.log("did: ", did);
+
+		/** Assign did to Ceramic object  */
+		this.ceramic.did = did;
+		this.session = {
+			did: did,
+			id: did.id
+		};
+
+		/** Return result */
+		return {
+			status: 200,
+			did: did.id,
+			details: null,
+			result: "Success connecting to the did:key."
+		}
 	}
 
 	/** Update user profile */
@@ -440,9 +488,18 @@ export class Orbis {
 	}
 
 	/** Save the last read time for notifications for the connected user */
-	async setNotificationsReadTime(type, timestamp) {
-		/** Create tile with the settings details */
-		let result = await this.createTileDocument({last_notifications_read_time: timestamp}, ["orbis", "settings", "notifications", type], notificationsReadSchemaCommit);
+	async setNotificationsReadTime(type, timestamp, context = null) {
+		let result;
+		if(context) {
+			/** Create tile with the settings details, including context */
+			result = await this.createTileDocument({
+				last_notifications_read_time: timestamp,
+				context: context
+			}, ["orbis", "settings", "notifications", type], notificationsReadSchemaCommit);
+		} else {
+			/** Create tile with the settings details */
+			result = await this.createTileDocument({last_notifications_read_time: timestamp}, ["orbis", "settings", "notifications", type], notificationsReadSchemaCommit);
+		}
 
 		/** Return confirmation results */
 		return result;
@@ -964,6 +1021,9 @@ export class Orbis {
 				case "all-master-posts":
 					query = this.api.rpc("all_master_posts").range(page * 50, (page + 1) * 50 - 1);
 					break;
+				case "all-did-master-posts":
+					query = this.api.rpc("all_did_master_posts", { post_did: options?.did }).range(page * 50, (page + 1) * 50 - 1);
+					break;
 				case "all-context-master-posts":
 					query = this.api.rpc("all_context_master_posts", { post_context: options?.context }).range(page * 50, (page + 1) * 50 - 1);
 					break;
@@ -1113,6 +1173,42 @@ export class Orbis {
 
 		/** Return results */
 		return({ data: res, error, status });
+	}
+
+	/** Retriev notifications based on the options passed as a parameter */
+	async getNotifications(options) {
+		let query;
+
+		/** Missing type in options */
+		if(!options || !options.type) {
+			return({ data: null, error: "Query missing type.", status });
+		}
+
+		/** Missing type in options */
+		if(!this.session || !this.session.id) {
+			return({ data: null, error: "User must be connected to retrieve notifications.", status });
+		}
+
+		/** Query with options details */
+		switch (options.type) {
+			case "social":
+				query = orbis.api.rpc("orbis_f_notifications", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "social" });
+				break;
+
+			case "social_in_context":
+				query = orbis.api.rpc("orbis_f_notifications_context", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "social", context_id: options.context });
+				break;
+
+			case "messages":
+				query = orbis.api.rpc("orbis_f_notifications", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "messages" });
+				break;
+			default:
+
+		}
+
+
+		let { data, error, status } = await query;
+		return({ data, error, status });
 	}
 
 	/** Get conversationv2 details */

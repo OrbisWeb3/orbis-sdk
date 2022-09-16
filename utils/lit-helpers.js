@@ -1,17 +1,28 @@
 import LitJsSdk from 'lit-js-sdk'
+const { signAndSaveAuthMessage } = LitJsSdk;
 import { toUtf8Bytes } from "@ethersproject/strings";
 import { hexlify } from "@ethersproject/bytes";
 import { blobToBase64, decodeb64, buf2hex, getAddressFromDid, sleep } from "./index.js";
+import {
+  Web3Provider,
+  JsonRpcSigner,
+  JsonRpcProvider,
+} from "@ethersproject/providers";
 
 /** Initialize lit */
 let lit;
 let litReady = false;
 export async function connectLitClient() {
   let ready;
-  lit = new LitJsSdk.LitNodeClient({alertWhenUnauthorized: false})
+  lit = new LitJsSdk.LitNodeClient({alertWhenUnauthorized: false, debug: false})
   await lit.connect();
   console.log("Lit is ready now!");
   litReady = true;
+}
+
+/** Returns lit object */
+export function getLit() {
+  return lit;
 }
 
 /** temporary function to wait for Lit to be ready before decrypting conten */
@@ -68,6 +79,28 @@ export async function generateLitSignature(provider, account) {
   }
 }
 
+/** Attempt at using SIWE for Lit */
+export async function generateLitSignatureV2(provider, account) {
+  const web3 = new Web3Provider(provider);
+  /** Step 1: Get chain id */
+  const { chainId } = await web3.getNetwork();
+  console.log("Chain ID is: ", chainId);
+
+  /** Step 2: Generate signature */
+  let res = await signAndSaveAuthMessage({
+    web3,
+    account,
+    chainId,
+    resources: null
+  });
+
+  return {
+    status: 200,
+    result: "Created lit signature with success."
+  }
+  console.log("signAndSaveAuthMessage res:", res);
+}
+
 /** Retrieve user's authsig from localStorage */
 function getAuthSig() {
   const authSig = JSON.parse(localStorage.getItem("lit-auth-signature"));
@@ -81,7 +114,6 @@ function getAuthSig() {
 
 /** Decrypt a string using Lit based on a set of inputs. */
 export async function decryptString(encryptedContent) {
-  console.log("Enter decryptString");
   /** Make sure Lit is ready before trying to decrypt the string */
   await litIsReady();
 
@@ -91,9 +123,7 @@ export async function decryptString(encryptedContent) {
   /** Decode string encoded as b64 to be supported by Ceramic */
   let decodedString;
   try {
-    decodedString = decodeb64(encryptedContent.encryptedString);
-    console.log("decryptString(): decodedString:", decodedString);
-  } catch(e) {
+    decodedString = decodeb64(encryptedContent.encryptedString);  } catch(e) {
     console.log("Error decoding b64 string: ", e);
     throw new Error(e);
   }
@@ -123,7 +153,6 @@ export async function decryptString(encryptedContent) {
   /** Decrypt the string using the encryption key */
   try {
       let _blob = new Blob([decodedString]);
-      console.log("decryptString(): _blob:", _blob);
       const decryptedString = await LitJsSdk.decryptString(_blob, decryptedSymmKey);
       return {
         status: 200,
@@ -133,6 +162,16 @@ export async function decryptString(encryptedContent) {
     console.log("Error decrypting string: ", e)
     throw new Error(e);
   }
+}
+
+/** API debug: Used to turn the decrypted symmetric key into a string  */
+export async function decryptBlob(decodedString, decryptedSymmKey) {
+  let _blob = new Blob([decodedString]);
+  const decryptedString = await LitJsSdk.decryptString(_blob, decryptedSymmKey);
+  return {
+    status: 200,
+    result: decryptedString
+  };
 }
 
 /** Encryp a DM */
