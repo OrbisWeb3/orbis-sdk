@@ -190,11 +190,28 @@ export async function encryptDM(recipients, body) {
 }
 
 /** Encrypt post based on the encryptionRules added by the user */
-export async function encryptPost(encryptionRules, body) {
-  /** Step 1: Retrieve access control conditions from recipients */
-  let accessControlConditions = generateAccessControlConditionsForPosts(encryptionRules);
+export async function encryptPost(body, encryptionRules) {
+  /**
+   * Step 1:
+   * Retrieve access control conditions based on the encryptionRules are used custom conditions
+   * passed as a parameter
+   */
+  let accessControlConditions;
+  if(encryptionRules && encryptionRules.accessControlConditions) {
+    accessControlConditions = encryptionRules.accessControlConditions;
+  } else {
+    accessControlConditions = generateAccessControlConditionsForPosts(encryptionRules);
+  }
 
-  /** Step 2: Encrypt string and return result */
+  /** Step 2: Check if accessControlConditions are valid */
+  if(!accessControlConditions) {
+    return {
+      status: 300,
+      result: "You must use valid access control conditions to encrypt posts."
+    }
+  }
+
+  /** Step 3: Encrypt string and return result */
   try {
     let result = await encryptString(accessControlConditions, body);
     return result

@@ -517,9 +517,13 @@ export class Orbis {
 
 		/** Check if posts should be encrypted  */
 		let _encryptedContent;
-		if(encryptionRules) {
+		if(encryptionRules && encryptionRules.type) {
+
 			try {
-				_encryptedContent = await encryptPost(encryptionRules, content.body);
+				/** Encrypt the content */
+				_encryptedContent = await encryptPost(content.body, encryptionRules);
+
+				/** Save encrypted content in `content` object to be stored in Ceramic */
 				content.encryptedBody = _encryptedContent;
 				content.body = "";
 			} catch(e) {
@@ -553,7 +557,10 @@ export class Orbis {
 		let _encryptedContent;
 		if(encryptionRules) {
 			try {
-				_encryptedContent = await encryptPost(encryptionRules, content.body);
+				/** Encrypt the content */
+				_encryptedContent = await encryptPost(content.body, encryptionRules);
+
+				/** Save encrypted content in `content` object to be stored in Ceramic */
 				content.encryptedBody = _encryptedContent;
 				content.body = "";
 			} catch(e) {
