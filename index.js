@@ -1256,8 +1256,8 @@ export class Orbis {
 	}
 
 	/** Get messages from one conversation */
-	async getMessages(conversation_id) {
-		let { data, error, status } = await this.api.from("orbis_v_messages").select().eq('conversation_id', conversation_id);
+	async getMessages(conversation_id, page = 0) {
+		let { data, error, status } = await this.api.from("orbis_v_messages").select().eq('conversation_id', conversation_id).range(page * 50, (page + 1) * 50 - 1);
 
 		/** Return results */
 		return({ data, error, status });
