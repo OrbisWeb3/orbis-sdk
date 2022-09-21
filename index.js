@@ -1029,7 +1029,11 @@ export class Orbis {
 					query = this.api.rpc("all_master_posts").range(page * 50, (page + 1) * 50 - 1);
 					break;
 				case "all-did-master-posts":
-					query = this.api.rpc("all_did_master_posts", { post_did: options?.did }).range(page * 50, (page + 1) * 50 - 1);
+					if(options && options.context) {
+						query = this.api.rpc("all_did_master_posts_with_context", { post_did: options?.did, post_context: options.context }).range(page * 50, (page + 1) * 50 - 1);
+					} else {
+						query = this.api.rpc("all_did_master_posts", { post_did: options?.did }).range(page * 50, (page + 1) * 50 - 1);
+					}
 					break;
 				case "all-context-master-posts":
 					query = this.api.rpc("all_context_master_posts", { post_context: options?.context }).range(page * 50, (page + 1) * 50 - 1);
@@ -1077,6 +1081,14 @@ export class Orbis {
 	/** Get post details */
 	async getPost(post_id) {
 		let { data, error, status } = await this.api.from("orbis_v_posts").select().eq('stream_id', post_id).single();
+
+		/** Return results */
+		return({ data, error, status });
+	}
+
+	/** Get user reaction for a post */
+	async getReaction(post_id, did) {
+		let { data, error, status } = await this.api.from("orbis_reactions").select('type').eq('post_id', post_id).eq('creator', did);
 
 		/** Return results */
 		return({ data, error, status });
