@@ -2,7 +2,8 @@
 import { CeramicClient } from '@ceramicnetwork/http-client';
 import { TileDocument } from '@ceramicnetwork/stream-tile';
 import { DIDSession } from 'did-session'
-import { EthereumAuthProvider, SolanaAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
+import { SolanaAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
+import { EthereumWebAuth, getAccountId } from '@didtools/pkh-ethereum'
 
 /** To generate dids from a Seed */
 import { DID } from 'dids'
@@ -15,7 +16,7 @@ import { connectLitClient, generateLitSignature, generateLitSignatureV2, generat
 
 /** Internal helpers */
 import { indexer } from './lib/indexer-db.js';
-import { forceIndex, forceIndexDid, sleep, randomSeed } from "./utils/index.js";
+import { forceIndex, forceIndexDid, sleep, randomSeed, sortByKey } from "./utils/index.js";
 
 /** Initiate the node URLs for the two networks */
 const MAINNET_NODE_URL = "https://node1.orbis.club/";
@@ -117,25 +118,29 @@ export class Orbis {
 		}
 
 		/** Step 2: Check if user already has an active account on Orbis */
-		let authProvider;
+		let authMethod;
+		let defaultChain = "1";
 		let address = addresses[0].toLowerCase();
-		/*let {data: existingDids, error: errorDids}  = await getDids(address);
-		if(errorDids) {
-			console.log("Error retrieving existing dids: ", errorDids);
-		}
-		if(existingDids && existingDids.length > 0) {
-			let _didArr = existingDids[0].did.split(":");
-			let default_network = _didArr[2];
-			if(default_network == "eip155") {
-				let default_chain = _didArr[3];
-				console.log("Default chain to use: ", default_chain);
-			}
-		} else {
-		}*/
+		let accountId = await getAccountId(provider, address)
 
-		/** Step 2: Create an authProvider object using the address connected */
+		/** Check if the user trying to connect already has an existing did on Orbis */
+		let {data: existingDids, error: errorDids}  = await this.getDids(address);
+		if(existingDids && existingDids.length > 0) {
+			let sortedDids = sortByKey(existingDids, "count_followers");
+			let _didArr = sortedDids[0].did.split(":");
+			let defaultNetwork = _didArr[2];
+			if(defaultNetwork == "eip155") {
+				defaultChain = _didArr[3];
+			}
+		}
+
+		/** Update the default accountId used to connect */
+		console.log("Default chain to use: ", defaultChain);
+		accountId.chainId.reference = defaultChain.toString();
+
+		/** Step 2: Create an authMethod object using the address connected */
 		try {
-			authProvider = new EthereumAuthProvider(provider, address)
+			authMethod = await EthereumWebAuth.getAuthMethod(provider, accountId)
 		} catch(e) {
 			return {
 				status: 300,
@@ -147,14 +152,14 @@ export class Orbis {
 		/** Step 3: Create a new session for this did */
 		let did;
 		try {
-			/** Expire session in 30 days by default */
-			const oneMonth = 60 * 60 * 24 * 31;
+			/** Expire session in 90 days by default */
+			const threeMonths = 60 * 60 * 24 * 90;
 
 			this.session = await DIDSession.authorize(
-				authProvider,
+				authMethod,
 				{
 					resources: [`ceramic://*`],
-					expiresInSecs: oneMonth
+					expiresInSecs: threeMonths
 				}
 			);
 			did = this.session.did;
@@ -1088,7 +1093,7 @@ export class Orbis {
 
 	/** Get user reaction for a post */
 	async getReaction(post_id, did) {
-		let { data, error, status } = await this.api.from("orbis_reactions").select('type').eq('post_id', post_id).eq('creator', did);
+		let { data, error, status } = await this.api.from("orbis_reactions").select('type').eq('post_id', post_id).eq('creator', did).single();
 
 		/** Return results */
 		return({ data, error, status });

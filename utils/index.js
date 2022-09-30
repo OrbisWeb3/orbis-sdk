@@ -118,3 +118,11 @@ export function buf2hex(buffer) { // buffer is an ArrayBuffer
 export const sleep = (milliseconds) => {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
 }
+
+/** To sort an array based on a specific key */
+export function sortByKey(array, key) {
+  return array.sort(function(a, b) {
+    var x = a[key]; var y = b[key];
+    return ((x > y) ? -1 : ((x < y) ? 1 : 0));
+  });
+}

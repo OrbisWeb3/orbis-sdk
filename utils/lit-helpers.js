@@ -256,10 +256,11 @@ export async function encryptString(accessControlConditions, body) {
 
 /** This function will take an array of recipients and turn it into a clean access control conditions array */
 export function generateAccessControlConditionsForDMs(recipients) {
+  let _cleanRecipients = cleanRecipients(recipients);
   let _accessControlConditions = [];
 
   /** Loop through each recipient */
-  recipients.forEach((recipient, i) => {
+  _cleanRecipients.forEach((recipient, i) => {
     /** Get ETH address from DiD */
     let { address, network } = getAddressFromDid(recipient);
 
@@ -280,7 +281,7 @@ export function generateAccessControlConditionsForDMs(recipients) {
       })
 
       /** Push `or` operator if recipient isn't the last one of the list */
-      if(i < recipients.length -1) {
+      if(i < _cleanRecipients.length - 1) {
         _accessControlConditions.push({"operator": "or"})
       }
     } else {
@@ -342,4 +343,22 @@ export function generateAccessControlConditionsForPosts(encryptionRules) {
 
   /** Return clean access control conditions */
   return _accessControlConditions;
+}
+
+/** Clean the list of recipients to keep only the did pkh */
+function cleanRecipients(recipients) {
+  /** Instantiate new array */
+  let _cleanRecipients = [];
+
+  /** Loop through all recipients */
+  recipients.forEach((recipient, i) => {
+    /** Get ETH address from DiD */
+    let { address, network } = getAddressFromDid(recipient);
+    if(address) {
+      _cleanRecipients.push(recipient);
+    }
+  });
+
+  /** Return recipients list without did:key */
+  return _cleanRecipients;
 }
