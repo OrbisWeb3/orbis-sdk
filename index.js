@@ -2,7 +2,7 @@
 import { CeramicClient } from '@ceramicnetwork/http-client';
 import { TileDocument } from '@ceramicnetwork/stream-tile';
 import { DIDSession } from 'did-session'
-import { SolanaAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
+import { SolanaAuthProvider, CosmosAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
 import { EthereumWebAuth, getAccountId } from '@didtools/pkh-ethereum'
 
 /** To generate dids from a Seed */
@@ -354,6 +354,16 @@ export class Orbis {
 				error: e,
 				result: "Error generating Lit signature."
 			}
+		}
+	}
+
+
+	async testConnectCosmos() {
+		let provider;
+		if ('keplr' in window) {
+			provider = window.keplr?.cosmoshub;
+		} else {
+			console.log("You're out of space, I'm out of time");
 		}
 	}
 
