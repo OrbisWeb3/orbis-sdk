@@ -361,9 +361,75 @@ export class Orbis {
 	async testConnectCosmos() {
 		let provider;
 		if ('keplr' in window) {
-			provider = window.keplr?.cosmoshub;
+			provider = window.keplr;
 		} else {
 			console.log("You're out of space, I'm out of time");
+		}
+
+		const resp = await provider.connect();
+		let address = resp.publicKey.toString();
+		console.log("Connected to Keplr with address: " + address);
+
+		/** Step 2: Create a Cosmic authProvider object using the address connected */
+		let authProvider;
+		try {
+			authProvider = new CosmosAuthProvider(provider, address);
+		} catch(e) {
+			console.log("Error creating CosmosAuthProvider: " + e);
+			return {
+				status: 300,
+				error: e,
+				result: "Error creating Cosmos provider object for Ceramic."
+			}
+		}
+
+		/** Step 3: Create a new session for Cosmic DID */
+		let did;
+		try {
+			/** Expire session in 30 days by default */
+			const oneMonth = 60 * 60 * 24 * 31;
+
+			this.session = await DIDSession.authorize(
+				authProvider,
+				{
+					resources: [`ceramic://*`],
+					expiresInSecs: oneMonth
+				}
+			);
+			did = this.session.did;
+		} catch(e) {
+			return {
+				status: 300,
+				error: e,
+				result: "Error creating a session for the DiD."
+			}
+		}
+		/** Step 4: Assign did to Ceramic object  */
+		this.ceramic.did = did;
+		console.log("Connected to Ceramic using: " + this.session.id);
+
+		/** Step 6: Force index did to retrieve blockchain details automatically */
+		let _resDid = await forceIndexDid(this.session.id);
+
+		/** Step 7: Get user profile details */
+		let { data, error, status } = await this.getProfile(this.session.id);
+
+		let details;
+		if(data) {
+			details = data.details;
+		} else {
+			details = {
+				did: this.session.id,
+				profile: null
+			}
+		}
+
+		/** Return result */
+		return {
+			status: 200,
+			did: this.session.id,
+			details: details,
+			result: "Success connecting to the DiD."
 		}
 	}
 
