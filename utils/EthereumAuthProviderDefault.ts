@@ -1,4 +1,4 @@
-import { EthereumAuthProvider, SolanaAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
+import { EthereumAuthProvider, SolanaAuthProvider, CosmosAuthProvider } from '@ceramicnetwork/blockchain-utils-linking'
 
 
 /** Replacing default EthereumAuthProvider class to force connection to an existing did if any. */
