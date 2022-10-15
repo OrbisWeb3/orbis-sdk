@@ -1,9 +1,14 @@
 import { Buffer } from 'buffer';
+import { indexer } from '../lib/indexer-db.js';
 
 /** To generate dids from a Seed */
 import { DID } from 'dids'
 import { Ed25519Provider } from 'key-did-provider-ed25519'
 import { getResolver } from 'key-did-resolver'
+
+/** Manage did:pkh */
+import { EthereumWebAuth, getAccountId } from '@didtools/pkh-ethereum'
+import { SolanaWebAuth, getAccountIdByNetwork} from '@didtools/pkh-solana'
 
 /** Force index a stream. This shouldn't be necessary because our indexer picks up all new streams automatically but at least we are 100% sure. */
 export async function forceIndex(stream_id) {
@@ -85,6 +90,114 @@ export function getAddressFromDid(did) {
       chain: null
     }
   }
+}
+
+/** Function to return the correct authMethod based on the provider and network used */
+export async function getAuthMethod(provider, chain) {
+  let authMethod;
+  let address;
+  let accountId;
+
+  /** Perform the correct connect action based on the chain the user is connected on */
+  switch (chain) {
+    /** Handle Ethereum wallet */
+    case "ethereum":
+      /** Step 1: Enable Ethereum provider (can be browser wallets or WalletConnect for now) */
+      let addresses;
+      try {
+        addresses = await provider.enable();
+      } catch(e) {
+        return {
+          status: 300,
+          error: e,
+          result: "Error enabling Ethereum provider."
+        }
+      }
+
+      /** Step 2: Check if user already has an active account on Orbis */
+      let defaultChain = "1";
+      address = addresses[0].toLowerCase();
+      accountId = await getAccountId(provider, address)
+
+      /** Check if the user trying to connect already has an existing did on Orbis */
+      let {data: existingDids, error: errorDids}  = await getDids(address);
+      if(existingDids && existingDids.length > 0) {
+        let sortedDids = sortByKey(existingDids, "count_followers");
+        let _didArr = sortedDids[0].did.split(":");
+        let defaultNetwork = _didArr[2];
+        if(defaultNetwork == "eip155") {
+          defaultChain = _didArr[3];
+        }
+      }
+
+      /** Update the default accountId used to connect */
+      accountId.chainId.reference = defaultChain.toString();
+
+      /** Step 2: Create an authMethod object using the address connected */
+      try {
+        authMethod = await EthereumWebAuth.getAuthMethod(provider, accountId);
+      } catch(e) {
+        return {
+          status: 300,
+          error: e,
+          result: "Error creating Ethereum provider object for Ceramic."
+        }
+      }
+      break;
+
+    /** Handle Solana wallets */
+    case "solana":
+  		/** Connect to Phantom */
+      try {
+    		const resp = await provider.connect();
+    		address = resp.publicKey.toString();
+    		console.log("Solana Wallet: Found: " + address);
+      } catch(e) {
+        return {
+  				status: 300,
+  				error: e,
+  				result: "Couldn't connect to Phantom"
+  			}
+      }
+
+  		/** Step 2: Create an authProvider object using the address connected */
+      try {
+        accountId = getAccountIdByNetwork('mainnet', address);
+        console.log("Solana accountId: ", accountId);
+      } catch(e) {
+        return {
+  				status: 300,
+  				error: e,
+  				result: "Couldn't generate accountId for Solana."
+  			}
+      }
+
+      /** Last step: Generate the Solana authMethod  */
+  		try {
+  			authMethod = await SolanaWebAuth.getAuthMethod(provider, accountId)
+  		} catch(e) {
+  			return {
+  				status: 300,
+  				error: e,
+  				result: "Error creating Ethereum provider object for Ceramic."
+  			}
+  		}
+      break;
+  }
+
+  /** Return authentication method to use for the did */
+  return {
+    authMethod: authMethod,
+    address: address
+  };
+}
+
+/** Check if a user already has active dids with this wallet address and returns profile details if any */
+async function getDids(address) {
+  let { data, error, status } = await indexer.from("orbis_v_profiles").select().ilike('address', address);
+
+  /** Return results */
+  return({ data, error, status });
 }
 
 /**
