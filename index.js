@@ -3,7 +3,7 @@ import { CeramicClient } from '@ceramicnetwork/http-client';
 import { TileDocument } from '@ceramicnetwork/stream-tile';
 import { DIDSession } from 'did-session'
 import { EthereumWebAuth, getAccountId } from '@didtools/pkh-ethereum'
-import { SolanaWebAuth, getAccountIdByNetwork} from '@didtools/pkh-solana'
+import axios from 'axios';
 
 /** To generate dids from a Seed */
 import { DID } from 'dids'
@@ -11,16 +11,36 @@ import { Ed25519Provider } from 'key-did-provider-ed25519'
 import { getResolver } from 'key-did-resolver'
 
 /** Lit Protocol */
-import LitJsSdk from 'lit-js-sdk'
-import { connectLitClient, generateLitSignature, generateLitSignatureV2, generateAccessControlConditionsForDMs, encryptDM, encryptPost, decryptString } from "./utils/lit-helpers.js";
+import {
+	connectLitClient,
+	generateLitSignature,
+	generateLitSignatureV2,
+	generateAccessControlConditionsForDMs,
+	encryptDM,
+	encryptPost,
+	decryptString
+} from "./utils/lit-helpers.js";
 
 /** Internal helpers */
 import { indexer } from './lib/indexer-db.js';
-import { forceIndex, forceIndexDid, sleep, randomSeed, sortByKey, getAuthMethod, getAddressFromDid } from "./utils/index.js";
+import {
+	forceIndex,
+	forceIndexDid,
+	sleep,
+	randomSeed,
+	sortByKey,
+	getAuthMethod,
+	getAddressFromDid,
+	resizeFile
+} from "./utils/index.js";
+import { authenticatePkp } from "./utils/ceramic-helpers.js"
 
 /** Initiate the node URLs for the two networks */
 const MAINNET_NODE_URL = "https://node1.orbis.club/";
 const TESTNET_NODE_URL = "https://ceramic-clay.3boxlabs.com";
+let PINATA_GATEWAY = "https://orbis.mypinata.cloud/ipfs/";
+let PINATA_API_KEY = null;
+let PINATA_SECRET_API_KEY = null;
 
 /** Set schemas Commit IDs */
 const postSchemaStream = "kjzl6cwe1jw1498inegtpji0iqf0htspb0qqswlofjy0hak1s3u2pf19qql7oak";
@@ -85,6 +105,19 @@ export class Orbis {
 			}
 		}
 
+		/** Assign Pinata API keys */
+		if(options) {
+			if(options.PINATA_GATEWAY) {
+				PINATA_GATEWAY = options.PINATA_GATEWAY;
+			}
+			if(options.PINATA_API_KEY) {
+				PINATA_API_KEY = options.PINATA_API_KEY;
+			}
+			if(options.PINATA_SECRET_API_KEY) {
+				PINATA_SECRET_API_KEY = options.PINATA_SECRET_API_KEY;
+			}
+		}
+
 		/** Create API object that developers can use to query content from Orbis */
 		this.api = indexer;
 
@@ -94,7 +127,6 @@ export class Orbis {
 
   /** The connect function will connect to an EVM wallet and create or connect to a Ceramic did */
   async connect(provider, lit = true) {
-
 		/** If provider isn't passed we use window.ethereum */
 		if(!provider) {
 			if(window.ethereum) {
@@ -234,7 +266,7 @@ export class Orbis {
   }
 
 	/** The connect function will connect to an EVM wallet and create or connect to a Ceramic did */
-  async connect_v2({provider, chain = "ethereum", lit = false}) {
+  async connect_v2({provider, chain = "ethereum", lit = false, oauth = null}) {
 		/** Save chain we are using in global state */
 		this.chain = chain;
 
@@ -249,28 +281,87 @@ export class Orbis {
 			}
 		}
 
-		/** Initialize some value */
-		let { authMethod, address } = await getAuthMethod(provider, chain);
-
-		/** Step 3: Create a new session for this did */
+		/** Variables */
+		const threeMonths = 60 * 60 * 24 * 90;
 		let did;
-		try {
-			/** Expire session in 90 days by default */
-			const threeMonths = 60 * 60 * 24 * 90;
 
-			this.session = await DIDSession.authorize(
-				authMethod,
-				{
-					resources: [`ceramic://*`],
-					expiresInSecs: threeMonths
+		/** User is connecting with a web2 provider */
+		if(provider == 'oauth') {
+			/** Generate request variables for API call */
+			let oauthData = await fetch("http://localhost:3004/assign-pkp", {
+	      method: 'POST',
+	      headers: { 'Content-Type': 'application/json' },
+	      body: JSON.stringify({
+	        accessToken: oauth.accessToken,
+	        userId: oauth.userId,
+	        authType: oauth.type,
+	        hostname: window.location.hostname
+	      })
+	    });
+			let oauthResult = await oauthData.json();
+
+			/** Request was successful, proceed */
+			if(oauthResult.status == 200) {
+				/** API generated a new PKP and a session-string, proceed to login the user */
+				if(oauthResult.sessionString) {
+					console.log("API generated a new PKP and a session-string, proceed to login the user: ", oauthResult);
+	        await this.isConnected(oauthResult.sessionString);
+	      }
+
+				/** User already has a PKP, get it to sign a SIWE message */
+				else {
+	        console.log("User is connecting to an existing pkp: ", oauthResult);
+					let pkpAuthenticated = await authenticatePkp({
+						ipfs: oauthResult.result.authMethod.ipfs,
+						address: oauthResult.result.pkp.address,
+						publicKey: oauthResult.result.pkp.publicKey,
+						accessToken: oauth.accessToken,
+						userId: oauth.userId,
+						authMethodType: 3
+					});
+
+					if(pkpAuthenticated.status == 200) {
+						this.session = pkpAuthenticated.session;
+						console.log("this.session", this.session);
+						did = this.session.did;
+					} else {
+						return {
+							status: 300,
+							result: "Couldn't authenticate PKP."
+						}
+					}
+	      }
+			} else {
+				return {
+					status: 300,
+					error: oauthResult,
+					result: "Failed to generate PKP for Oauth method."
 				}
-			);
-			did = this.session.did;
-		} catch(e) {
-			return {
-				status: 300,
-				error: e,
-				result: "Error creating a session for the DiD."
+			}
+		}
+		/** User is connecting with a web3 provider */
+		else {
+			/** Initialize some value */
+			let { authMethod, address } = await getAuthMethod(provider, chain);
+
+			/** Step 3: Create a new session for this did */
+			try {
+				/** Expire session in 90 days by default */
+				this.session = await DIDSession.authorize(
+					authMethod,
+					{
+						resources: [`ceramic://*`],
+						expiresInSecs: threeMonths
+					}
+				);
+				console.log("this.session", this.session);
+				did = this.session.did;
+			} catch(e) {
+				return {
+					status: 300,
+					error: e,
+					result: "Error creating a session for the DiD."
+				}
 			}
 		}
 
@@ -287,7 +378,6 @@ export class Orbis {
 
 		/** Step 5 (optional): Initialize the connection to Lit */
 		if(lit == true) {
-
 			let _userAuthSig = localStorage.getItem("lit-auth-signature-" + address);
 			if(!_userAuthSig || _userAuthSig == "" || _userAuthSig == undefined) {
 				try {
@@ -337,13 +427,15 @@ export class Orbis {
   }
 
 	/** Automatically reconnects to a session stored in localStorage, returns false if there isn't any session in localStorage */
-	async isConnected() {
+	async isConnected(sessionString) {
 		await this.ceramic;
 
 		/** Check if an existing session is stored in localStorage */
-		let sessionString = localStorage.getItem("ceramic-session");
 		if(!sessionString) {
-			return false;
+			sessionString = localStorage.getItem("ceramic-session");
+			if(!sessionString) {
+				return false;
+			}
 		}
 
 		/** Connect to Ceramic using the session previously stored */
@@ -387,9 +479,11 @@ export class Orbis {
 
 		/** Check if user has configured Lit */
 		let hasLit = false;
-		let hasLitSig = localStorage.getItem("lit-auth-signature");
-		if(hasLitSig) {
-			hasLit = true;
+		if(typeof Storage !== "undefined") {
+			let hasLitSig = localStorage.getItem("lit-auth-signature");
+			if(hasLitSig) {
+				hasLit = true;
+			}
 		}
 
 		let details;
@@ -415,7 +509,9 @@ export class Orbis {
 
 	/** Connect to Lit only (usually in the case the lit signature wasn't generated in the first place) */
 	async connectLit(provider) {
+		console.log("Enter connectLit()");
 		let { address, chain, network } = getAddressFromDid(this.session.id);
+		console.log("Retrieved address from Did: ", address);
 		switch (network) {
 			case "eip155":
 				this.chain = "ethereum";
@@ -862,6 +958,87 @@ export class Orbis {
 			}
 		}
 	}
+
+	/** Function to upload a media to Orbis */
+	async uploadMedia(file) {
+		console.log("Enter uploadMedia with: ", file);
+		if(!PINATA_API_KEY) {
+			console.log("You haven't setup your PINATA_API_KEY yet.");
+			return {
+				status: 300,
+				error: e,
+				result: "You haven't setup your PINATA_API_KEY yet."
+			}
+		}
+
+		if(!PINATA_SECRET_API_KEY) {
+			console.log("You haven't setup your PINATA_SECRET_API_KEY yet.");
+			return {
+				status: 300,
+				error: e,
+				result: "You haven't setup your PINATA_SECRET_API_KEY yet."
+			}
+		}
+
+		/** Try to resize media
+		try {
+			switch(file.type) {
+	      case "image/gif":
+          console.log("This is a GIF, we can't resize it.");
+          break;
+	      case "image/png":
+          mediaToUpload = await resizeFile(file, 1024, "PNG", "file");
+          break;
+	      case "image/jepg":
+          mediaToUpload = await resizeFile(file, 1024, "JPEG", "file");
+          break;
+	      default:
+          mediaToUpload = await resizeFile(file, 1024, "PNG", "file");
+          break;
+	    }
+		} catch(e) {
+			return {
+				status: 300,
+				error: e,
+				result: "Error resizing media."
+			}
+		}
+		*/
+
+		/** Try to upload resized image to IPFS*/
+    try {
+			const formData = new FormData();
+			formData.append("file", file);
+
+			const resFile = await axios({
+				method: "post",
+				url: "https://api.pinata.cloud/pinning/pinFileToIPFS",
+				data: formData,
+				headers: {
+						'pinata_api_key': PINATA_API_KEY,
+						'pinata_secret_api_key': PINATA_SECRET_API_KEY,
+						"Content-Type": "multipart/form-data"
+				},
+			});
+
+			if(resFile.status == 200) {
+				return {
+					status: 200,
+					result: {
+		        url: "ipfs://" + resFile.data.IpfsHash,
+		        gateway: PINATA_GATEWAY
+		      }
+				}
+			}
+    } catch (error) {
+      console.log('Error uploading media: ', error)
+			return {
+				status: 300,
+				error: error,
+				result: "Error uploading media."
+			}
+    }
+  }
 
 	/** Decrypt an encrypted post using Lit Protocol */
 	async decryptPost(content) {

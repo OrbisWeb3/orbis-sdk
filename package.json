@@ -1,6 +1,6 @@
 {
   "name": "@orbisclub/orbis-sdk",
-  "version": "0.3.93",
+  "version": "0.4.04-beta.10",
   "description": "Official package to implement quickly an Orbis powered decentralized social layer within your application.",
   "author": "Baptiste Grève",
   "license": "ISC",
@@ -27,12 +27,14 @@
     "@ethersproject/providers": "^5.7.0",
     "@ethersproject/strings": "^5.6.1",
     "@supabase/supabase-js": "^1.35.3",
+    "axios": "^1.1.3",
     "buffer": "^6.0.3",
     "did-session": "^1.0.0",
     "dids": "^3.3.0",
     "key-did-provider-ed25519": "^2.0.0",
     "key-did-resolver": "^2.0.4",
-    "lit-js-sdk": "^1.1.185",
+    "lit-js-sdk": "^1.2.22",
+    "react-image-file-resizer": "^0.4.8",
     "uint8arrays": "^3.1.0"
   }
 }

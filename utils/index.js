@@ -1,4 +1,5 @@
 import { Buffer } from 'buffer';
+import Resizer from "react-image-file-resizer";
 import { indexer } from '../lib/indexer-db.js';
 
 /** To generate dids from a Seed */
@@ -231,6 +232,21 @@ export function buf2hex(buffer) { // buffer is an ArrayBuffer
 export const sleep = (milliseconds) => {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
 }
+
+/** Resize image uploaded */
+export const resizeFile = (file, maxSize = 300, type = "PNG", outputType = "base64") =>
+  new Promise((resolve) => {
+    Resizer.imageFileResizer(
+      file,
+      maxSize,
+      maxSize,
+      "WEBP",
+      100,
+      0,
+      (uri) => { resolve(uri); },
+      outputType
+    );
+});
 
 /** To sort an array based on a specific key */
 export function sortByKey(array, key) {

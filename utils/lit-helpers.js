@@ -15,13 +15,25 @@ import {
 
 /** Initialize lit */
 let lit;
+let litMumbai;
 let litReady = false;
 export async function connectLitClient() {
   let ready;
-  lit = new LitJsSdk.LitNodeClient({alertWhenUnauthorized: false, debug: false})
+  lit = new LitJsSdk.LitNodeClient({
+    alertWhenUnauthorized: false,
+    debug: false
+  });
   await lit.connect();
   console.log("Lit is ready now!");
   litReady = true;
+
+  /** Connect to Lit Mumbai */
+  litMumbai = new LitJsSdk.LitNodeClient({
+    litNetwork: "mumbai",
+    alertWhenUnauthorized: false,
+    debug: false
+  });
+  await litMumbai.connect();
 }
 
 /** Returns lit object */
@@ -47,6 +59,7 @@ async function litIsReady() {
 
 /** Requires user to sign a message which will generate the lit-signature */
 export async function generateLitSignature(provider, account, providerNetwork) {
+  console.log("Enter generateLitSignature()");
   let signedMessage;
   let sig;
 
@@ -125,6 +138,7 @@ export async function generateLitSignature(provider, account, providerNetwork) {
 
 /** Attempt at using SIWE for Lit */
 export async function generateLitSignatureV2(provider, account, providerNetwork) {
+  console.log("Enter generateLitSignatureV2()");
   switch (providerNetwork) {
     /** Support for EVM chains */
     case "ethereum":
@@ -147,7 +161,6 @@ export async function generateLitSignatureV2(provider, account, providerNetwork)
       localStorage.setItem("lit-auth-signature", JSON.stringify(authSig));
       break;
   }
-
 
   /** Step 3: Return results */
   return {
@@ -536,14 +549,26 @@ function cleanRecipients(recipients) {
   };
 }
 
+/** This function will execute a Lit Action and return the results */
+export async function executeLitAction(action) {
+  let results;
+  try {
+    results = await litMumbai.executeJs(action);
+  } catch(e) {
+    console.log("Error running Lit Action: ", e);
+    return;
+  }
+  return results;
+}
+
 /** Default AuthSig to be used to write content */
-let evmEmptyAuthSig = {
+export const evmEmptyAuthSig = {
   sig: "0x111d0285180969b8790683e2665b9e48737deb995242fa9353ee7b42f879f12d7804b5d5152aedf7f59d32dfb02de46f2b541263738342dc811b7e54229fe5a31c",
   derivedVia: "web3.eth.personal.sign",
   signedMessage: "localhost:3000 wants you to sign in with your Ethereum account:\n0x348d53ac2638BEA8684Ac9ec4DDeAE1171b01059\n\n\nURI: http://localhost:3000\nVersion: 1\nChain ID: 137\nNonce: Tq3dXTTh4zHBmvWVM\nIssued At: 2022-10-04T12:48:40.872Z",
   address: "0x348d53ac2638bea8684ac9ec4ddeae1171b01059"
 };
-let solEmptyAuthSig = {
+export const solEmptyAuthSig = {
   sig: "8cfb8dc58d7f6e2740618af75c1c4fe3653e8179806e490062364765e49a5fd3810a7db1255a9355cf04b804aa30c8fb0c401b228db3d550b17ed59425c8f80f",
   derivedVia: "solana.signMessage",
   signedMessage: "I am creating an account to use Lit Protocol at 2022-10-04T12:45:03.943Z",
