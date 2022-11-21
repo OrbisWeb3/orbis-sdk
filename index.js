@@ -3,6 +3,7 @@ import { CeramicClient } from '@ceramicnetwork/http-client';
 import { TileDocument } from '@ceramicnetwork/stream-tile';
 import { DIDSession } from 'did-session'
 import { EthereumWebAuth, getAccountId } from '@didtools/pkh-ethereum'
+import { Store } from './store.js';
 import axios from 'axios';
 
 /** To generate dids from a Seed */
@@ -50,7 +51,7 @@ const groupSchemaStream = "kjzl6cwe1jw1487a0xluwl3ip6lcdcfn8ahgomsbf8x5rf65mktdj
 const groupSchemaCommit = "k3y52l7qbv1fry2bramzfrq10z2vrywf96yk6n61d8ffsyzvs0k0wd68sanjjo16o";
 
 const channelSchemaStream = "kjzl6cwe1jw148ehiqrzh9npfr4kk4kyqd4as259yqzcr3i1dnrnm30ck5q0t6f";
-const channelSchemaCommit = "k3y52l7qbv1fry3r0laf0asokw0wi74l2zhaknj9iv3veoow9t50nx1ehbcp1rhmo";
+const channelSchemaCommit = "k1dpgaqe3i64kjsvqaacts7pw2j419foun3d53gbyiv90gguufsv529yaq55rh0gmo68o5nft4ja7xmrtq9x1is59hn1ibx16d1e5wzg4tdxtutmegh2hy1a6";
 
 const profileSchemaStream = "kjzl6cwe1jw145ak5a52cln1i6ztmece01w5qd03dib4lg8i3tt57sjauu14be8";
 const profileSchemaCommit = "k3y52l7qbv1frxhn39k40plvupdqqna03kdgorggo0274ojggr7z93ex979jyp14w";
@@ -81,6 +82,7 @@ export class Orbis {
 	session;
 	api;
 	chain = "ethereum";
+	store;
 
   /**
 	 * Initialize the SDK by connecting to a Ceramic node, developers can pass their own Ceramic object if the user is
@@ -105,6 +107,19 @@ export class Orbis {
 			}
 		}
 
+		/** Manage storage */
+		if(options && options.store) {
+			this.store = new Store({type: options.store})
+		} else {
+			/** Try to automatically set the right storage */
+			if(typeof Storage !== "undefined") {
+				this.store = new Store({type: 'localStorage'})
+			} else {
+				this.store = new Store({type: 'AsyncStorage'})
+			}
+
+		}
+
 		/** Assign Pinata API keys */
 		if(options) {
 			if(options.PINATA_GATEWAY) {
@@ -118,11 +133,13 @@ export class Orbis {
 			}
 		}
 
+		/** Connect to Lit */
+		if(!options || (options.useLit != false)) {
+			connectLitClient();
+		}
+
 		/** Create API object that developers can use to query content from Orbis */
 		this.api = indexer;
-
-		/** Connect to Lit */
-		connectLitClient();
 	}
 
   /** The connect function will connect to an EVM wallet and create or connect to a Ceramic did */
@@ -207,7 +224,8 @@ export class Orbis {
 		/** Step 3 bis: Store session in localStorage to re-use */
 		try {
 			const sessionString = this.session.serialize()
-			localStorage.setItem("ceramic-session", sessionString);
+			this.store.setItem("ceramic-session", sessionString);
+			//localStorage.setItem("ceramic-session", sessionString);
 		} catch(e) {
 			console.log("Error creating sessionString: " + e);
 		}
@@ -217,17 +235,19 @@ export class Orbis {
 
 		/** Step 5 (optional): Initialize the connection to Lit */
 		if(lit == true) {
-			let _userAuthSig = localStorage.getItem("lit-auth-signature-" + address);
+			//let _userAuthSig = localStorage.getItem("lit-auth-signature-" + address);
+			let _userAuthSig = await this.store.getItem("lit-auth-signature-" + address);
 			if(!_userAuthSig || _userAuthSig == "" || _userAuthSig == undefined) {
 				try {
 					/** Generate the signature for Lit */
-					let resLitSig = await generateLitSignature(provider, address);
+					let resLitSig = await generateLitSignature(provider, address, "ethereum", this.store);
 				} catch(e) {
 					console.log("Error connecting to Lit network: " + e);
 				}
 			} else {
 				/** User is already connected, save current accoutn signature in lit-auth-signature object for easy retrieval */
-				localStorage.setItem("lit-auth-signature", _userAuthSig);
+				//localStorage.setItem("lit-auth-signature", _userAuthSig);
+				await this.store.setItem("lit-auth-signature", _userAuthSig);
 			}
 		}
 
@@ -239,7 +259,7 @@ export class Orbis {
 
 		/** Check if user has configured Lit */
 		let hasLit = false;
-		let hasLitSig = localStorage.getItem("lit-auth-signature");
+		let hasLitSig = await this.store.getItem("lit-auth-signature");
 		if(hasLitSig) {
 			hasLit = true;
 		}
@@ -284,6 +304,9 @@ export class Orbis {
 		/** Variables */
 		const threeMonths = 60 * 60 * 24 * 90;
 		let did;
+
+		/** Retrieve authMethod and address based on the provider and chain passed as a parameter */
+		let { authMethod, address } = await getAuthMethod(provider, chain);
 
 		/** User is connecting with a web2 provider */
 		if(provider == 'oauth') {
@@ -339,11 +362,9 @@ export class Orbis {
 				}
 			}
 		}
+
 		/** User is connecting with a web3 provider */
 		else {
-			/** Initialize some value */
-			let { authMethod, address } = await getAuthMethod(provider, chain);
-
 			/** Step 3: Create a new session for this did */
 			try {
 				/** Expire session in 90 days by default */
@@ -368,7 +389,7 @@ export class Orbis {
 		/** Step 3 bis: Store session in localStorage to re-use */
 		try {
 			const sessionString = this.session.serialize()
-			localStorage.setItem("ceramic-session", sessionString);
+			await this.store.setItem("ceramic-session", sessionString);
 		} catch(e) {
 			console.log("Error creating sessionString: " + e);
 		}
@@ -378,17 +399,17 @@ export class Orbis {
 
 		/** Step 5 (optional): Initialize the connection to Lit */
 		if(lit == true) {
-			let _userAuthSig = localStorage.getItem("lit-auth-signature-" + address);
+			let _userAuthSig = await this.store.getItem("lit-auth-signature-" + address);
 			if(!_userAuthSig || _userAuthSig == "" || _userAuthSig == undefined) {
 				try {
 					/** Generate the signature for Lit */
-					let resLitSig = await generateLitSignatureV2(provider, address, chain);
+					let resLitSig = await generateLitSignatureV2(provider, address, chain, this.store);
 				} catch(e) {
 					console.log("Error connecting to Lit network: " + e);
 				}
 			} else {
 				/** User is already connected, save current accoutn signature in lit-auth-signature object for easy retrieval */
-				localStorage.setItem("lit-auth-signature", _userAuthSig);
+				await this.store.setItem("lit-auth-signature", _userAuthSig);
 			}
 		}
 
@@ -400,7 +421,7 @@ export class Orbis {
 
 		/** Check if user has configured Lit */
 		let hasLit = false;
-		let hasLitSig = localStorage.getItem("lit-auth-signature");
+		let hasLitSig = await this.store.getItem("lit-auth-signature");
 		if(hasLitSig) {
 			hasLit = true;
 		}
@@ -430,9 +451,9 @@ export class Orbis {
 	async isConnected(sessionString) {
 		await this.ceramic;
 
-		/** Check if an existing session is stored in localStorage */
+		/** Check if an existing session is stored in storage */
 		if(!sessionString) {
-			sessionString = localStorage.getItem("ceramic-session");
+			sessionString = await this.store.getItem("ceramic-session");
 			if(!sessionString) {
 				return false;
 			}
@@ -479,11 +500,9 @@ export class Orbis {
 
 		/** Check if user has configured Lit */
 		let hasLit = false;
-		if(typeof Storage !== "undefined") {
-			let hasLitSig = localStorage.getItem("lit-auth-signature");
-			if(hasLitSig) {
-				hasLit = true;
-			}
+		let hasLitSig = await this.store.getItem("lit-auth-signature");
+		if(hasLitSig) {
+			hasLit = true;
 		}
 
 		let details;
@@ -569,9 +588,9 @@ export class Orbis {
 	/** Destroys the Ceramic session string stored in localStorage */
 	logout() {
 		try {
-			localStorage.removeItem("ceramic-session");
-			localStorage.removeItem("lit-auth-signature");
-			localStorage.removeItem("lit-auth-sol-signature");
+			this.store.removeItem("ceramic-session");
+			this.store.removeItem("lit-auth-signature");
+			this.store.removeItem("lit-auth-sol-signature");
 			return {
 				status: 200,
 				result: "Logged out from Orbis and Ceramic."
@@ -918,7 +937,20 @@ export class Orbis {
 		/** Retrieve list of recipients from conversation_id */
 		let conversation;
 		try {
-			conversation = await this.ceramic.loadStream(content.conversation_id);
+			let { data: data_conv, error: error_conv } = await this.getConversation(content.conversation_id);
+
+			if(error_conv) {
+				console.log("Error retrieving conversation details: ", error_conv);
+				return {
+					status: 300,
+					error: error_conv,
+					result: "Error retrieving conversation details."
+				}
+			}
+
+			/** Save conversation details */
+			conversation = data_conv;
+			//conversation = await this.ceramic.loadStream(content.conversation_id);
 		} catch(e) {
 			return {
 				status: 300,
@@ -928,7 +960,7 @@ export class Orbis {
 		}
 
 		/** Make sure recipients array is valid */
-		if(!conversation.content?.recipients || conversation.content?.recipients.length <= 0) {
+		if(!conversation.recipients || conversation.recipients.length <= 0) {
 			return {
 				status: 300,
 				error: "Recipients array is empty or doesn't exist. Please retry or create a new conversation.",
@@ -938,7 +970,7 @@ export class Orbis {
 
 		/** Try to encrypt content */
 		try {
-			let { encryptedMessage, encryptedMessageSolana } = await encryptDM(conversation.content.recipients, content.body);
+			let { encryptedMessage, encryptedMessageSolana } = await encryptDM(conversation.recipients, content.body);
 
 			/** Create content object */
 			let _content = {
@@ -1044,7 +1076,7 @@ export class Orbis {
 	async decryptPost(content) {
 		let res;
 		try {
-			res = await decryptString(content.encryptedBody, this.chain);
+			res = await decryptString(content.encryptedBody, this.chain, this.store);
 			return res;
 		} catch(e) {
 			return {
@@ -1061,10 +1093,10 @@ export class Orbis {
 		try {
 			switch (this.chain) {
 				case "ethereum":
-					res = await decryptString(content.encryptedMessage, this.chain);
+					res = await decryptString(content.encryptedMessage, this.chain, this.store);
 					break;
 				case "solana":
-					res = await decryptString(content.encryptedMessageSolana, this.chain);
+					res = await decryptString(content.encryptedMessageSolana, this.chain, this.store);
 					break;
 			}
 
@@ -1357,6 +1389,14 @@ export class Orbis {
 		return({ data, error, status });
 	}
 
+	/** Get Verified Credentials from user */
+	async getCredentials(did) {
+		let { data, error, status } = await this.api.from("verified_credentials").select().ilike('subject_id', did);
+
+		/** Return results */
+		return({ data, error, status });
+	}
+
 	/** Get profiles matching the usernames passed as a parameter */
 	async getProfilesByUsername(username) {
 		let { data, error, status } = await this.api.from("orbis_v_profiles").select().ilike('username', username + "%").range(0, 10).order('timestamp', { ascending: false });
@@ -1403,7 +1443,7 @@ export class Orbis {
 		return({ data: res, error, status });
 	}
 
-	/** Retriev notifications based on the options passed as a parameter */
+	/** Retrieve notifications based on the options passed as a parameter */
 	async getNotifications(options) {
 		let query;
 
@@ -1412,7 +1452,7 @@ export class Orbis {
 			return({ data: null, error: "Query missing type.", status });
 		}
 
-		/** Missing type in options */
+		/** User must be connected to access notifications */
 		if(!this.session || !this.session.id) {
 			return({ data: null, error: "User must be connected to retrieve notifications.", status });
 		}
@@ -1420,22 +1460,38 @@ export class Orbis {
 		/** Query with options details */
 		switch (options.type) {
 			case "social":
-				query = orbis.api.rpc("orbis_f_notifications", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "social" });
+				query = this.api.rpc("orbis_f_notifications", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "social" });
 				break;
 
 			case "social_in_context":
-				query = orbis.api.rpc("orbis_f_notifications_context", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "social", context_id: options.context });
+				query = this.api.rpc("orbis_f_notifications_context", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "social", context_id: options.context });
 				break;
 
 			case "messages":
-				query = orbis.api.rpc("orbis_f_notifications", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "messages" });
+				query = this.api.rpc("orbis_f_notifications", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "messages" });
 				break;
 			default:
 
 		}
 
-
 		let { data, error, status } = await query;
+		return({ data, error, status });
+	}
+
+	/** Returns count of new notifications for a user (in a specific context or not) */
+	async getNotificationsCount(options) {
+
+		/** Missing type in options */
+		if(!options || !options.type) {
+			return({ data: null, error: "Query missing type." });
+		}
+
+		/** User must be connected to access notifications */
+		if(!this.session || !this.session.id) {
+			return({ data: null, error: "User must be connected to retrieve notifications." });
+		}
+
+		let { data, error, status } = await this.api.rpc("orbis_f_count_notifications", { user_did: this.session.id, notif_type: options.type }).single();
 		return({ data, error, status });
 	}
 

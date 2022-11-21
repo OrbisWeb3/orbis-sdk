@@ -23,7 +23,13 @@ export async function forceIndex(stream_id) {
   let _result;
   try {
     _result = await fetch("https://api.orbis.club/index-stream/mainnet/" + stream_id, requestOptions);
-		  console.log("Indexed " + stream_id + " with success.");
+    let res_final = await _result.json();
+    console.log("_result:", res_final);
+    if(res_final.status == 200) {
+      console.log("Indexed " + stream_id + " with success.");
+    } else {
+      console.log("Error indexing stream " + stream_id + ":", res_final.result);
+    }
     return;
   } catch(e) {
     console.log("Error indexing new stream: ", e);
@@ -61,19 +67,35 @@ export async function forceIndexDid(did) {
 
 /** Returns a JSON object with the address and network based on the did */
 export function getAddressFromDid(did) {
-  if(did && did.substring(0, 7) == "did:pkh") {
-    /** Explode address to retrieve did */
-    let addressParts = did.split(":");
-    if(addressParts.length >= 4) {
-      let address = addressParts[4];
-      let network = addressParts[2];
-      let chain = addressParts[2] + ":" + addressParts[3];
+  if(did) {
+    let didParts = did.split(":");
+    if(did.substring(0, 7) == "did:pkh") {
+      /** Explode address to retrieve did */
+      if(didParts.length >= 4) {
+        let address = didParts[4];
+        let network = didParts[2];
+        let chain = didParts[2] + ":" + didParts[3];
 
-      /** Return result */
+        /** Return result */
+        return {
+          address: address,
+          network: network,
+          chain: chain
+        }
+      } else {
+        /** Return null object */
+        return {
+          address: null,
+          network: null,
+          chain: null
+        }
+      }
+    } else if(did.substring(0, 7) == "did:key") {
+      /** Return did object */
       return {
-        address: address,
-        network: network,
-        chain: chain
+        address: didParts[3],
+        network: 'key',
+        chain: 'key'
       }
     } else {
       /** Return null object */
@@ -91,6 +113,41 @@ export function getAddressFromDid(did) {
       chain: null
     }
   }
+}
+
+/** Will check if user owns a specific credential and return a boolean */
+export function checkVcOwnership(user_credentials, credential_required) {
+  let has_vc = false;
+  let credential_required_value = credential_required.id;
+
+  /** Check if credential has a variable */
+  if(credential_required.variable && credential_required_value.includes('{x}')) {
+    credential_required_value = credential_required_value.replace('{x}', credential_required.variable.id);
+  }
+  /** Check if a user owns the required credential */
+  user_credentials.forEach((user_vc, i) => {
+    /** Check if the credential comes from the correct issuer */
+    if(user_vc.issuer == credential_required.issuer) {
+      switch (credential_required.rule) {
+        case "=":
+          if(user_vc.content.credentialSubject[credential_required.key] == credential_required_value) {
+            has_vc = true;
+            console.log("User has the correct credential / requested:", credential_required);
+            console.log("User has the correct credential / owned:", user_vc.content.credentialSubject[credential_required.key]);
+          }
+          break;
+        case "includes":
+          if(user_vc.content.credentialSubject[credential_required.key].includes(credential_required_value)) {
+            has_vc = true;
+            console.log("User has the correct credential.");
+          }
+          break;
+      }
+    }
+  });
+
+  /** Return result */
+  return has_vc;
 }
 
 /** Function to return the correct authMethod based on the provider and network used */

@@ -58,7 +58,7 @@ async function litIsReady() {
 }
 
 /** Requires user to sign a message which will generate the lit-signature */
-export async function generateLitSignature(provider, account, providerNetwork) {
+export async function generateLitSignature(provider, account, providerNetwork, store) {
   console.log("Enter generateLitSignature()");
   let signedMessage;
   let sig;
@@ -125,20 +125,19 @@ export async function generateLitSignature(provider, account, providerNetwork) {
   }
 
   /** Save signature in localStorage */
-  localStorage.setItem("lit-auth-signature-" + account, sig);
-  localStorage.setItem("lit-auth-signature", sig);
+  await store.setItem("lit-auth-signature-" + account, sig);
+  await store.setItem("lit-auth-signature", sig);
 
   /** Return success */
   return {
     status: 200,
     result: "Created lit signature with success."
   }
-
 }
 
 /** Attempt at using SIWE for Lit */
-export async function generateLitSignatureV2(provider, account, providerNetwork) {
-  console.log("Enter generateLitSignatureV2()");
+export async function generateLitSignatureV2(provider, account, providerNetwork, store) {
+  console.log("Enter generateLitSignatureV2() with account:", account);
   switch (providerNetwork) {
     /** Support for EVM chains */
     case "ethereum":
@@ -158,7 +157,7 @@ export async function generateLitSignatureV2(provider, account, providerNetwork)
     /** Support for Solana */
     case "solana":
       const authSig = await LitJsSdk.checkAndSignAuthMessage({ chain: "solana" });
-      localStorage.setItem("lit-auth-signature", JSON.stringify(authSig));
+      store.setItem("lit-auth-signature", JSON.stringify(authSig));
       break;
   }
 
@@ -170,8 +169,9 @@ export async function generateLitSignatureV2(provider, account, providerNetwork)
 }
 
 /** Retrieve user's authsig from localStorage */
-function getAuthSig() {
-  const authSig = JSON.parse(localStorage.getItem("lit-auth-signature"));
+async function getAuthSig(store) {
+  let _authSig = await store.getItem("lit-auth-signature")
+  const authSig = JSON.parse(_authSig);
   if(authSig && authSig != "") {
     return authSig;
   } else {
@@ -181,12 +181,12 @@ function getAuthSig() {
 }
 
 /** Decrypt a string using Lit based on a set of inputs. */
-export async function decryptString(encryptedContent, chain) {
+export async function decryptString(encryptedContent, chain, store) {
   /** Make sure Lit is ready before trying to decrypt the string */
   await litIsReady();
 
   /** Retrieve AuthSig */
-  let authSig = getAuthSig();
+  let authSig = await getAuthSig(store);
 
   /** Decode string encoded as b64 to be supported by Ceramic */
   let decodedString;
@@ -397,6 +397,73 @@ export async function encryptString(body, chain = "ethereum", controlConditions)
   }
 }
 
+/** Debug only: Encrypt string from API */
+export async function encryptStringFromAPI(body, accessControlConditions, solRpcConditions) {
+
+  /** Creating variables for the request */
+  const requestOptions = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accessControlConditions: accessControlConditions,
+      solRpcConditions: solRpcConditions,
+      body: body
+    })
+  };
+  try {
+    let _data = await fetch("https://lit.orbis.club/lit-encrypt-v2", requestOptions);
+    console.log("data retrieved from API: ", _data);
+    let _result = await _data.json();
+    console.log("_result retrieved from API: ", _result);
+    return _result.result;
+  } catch(e) {
+    console.log("Error encrypting string with API: ", e)
+    return {
+      status: 300,
+      result: e
+    };
+  }
+}
+
+/** Debug only: Decrypt string from API */
+export async function decryptStringFromAPI(encryptedContent, chain) {
+
+  /** Retrieve AuthSig */
+  let authSig = await getAuthSig(store);
+
+  /** Making sure authsig is present  */
+  if(!authSig) {
+    return {
+      status: 300,
+      result: "Error decrypting string.",
+      error: "AuthSig must be present."
+    }
+  }
+
+  const requestOptions = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      authSig: JSON.stringify(authSig),
+      chain: chain,
+      encryptedContent: encryptedContent
+    })
+  };
+  try {
+    let _data = await fetch("https://lit.orbis.club/lit-decrypt-v2", requestOptions);
+    console.log("In decryptStringFromAPI() - _data: ", _data);
+    let _result = await _data.json();
+    console.log("In decryptStringFromAPI() - _result: ", _result);
+    return _result;
+  } catch(e) {
+    console.log("Error decrypting string with API: ", e)
+    return {
+      status: 300,
+      result: e
+    };
+  }
+}
+
 /** This function will take an array of recipients and turn it into a clean access control conditions array */
 export function generateAccessControlConditionsForDMs(recipients) {
   let { ethRecipients, solRecipients } = cleanRecipients(recipients);
@@ -479,7 +546,7 @@ export function generateAccessControlConditionsForPosts(encryptionRules) {
           ],
           returnValueTest: {
             comparator: '>=',
-            value: encryptionRules.minTokenBalance
+            value: encryptionRules.minTokenBalance.toString()
           }
         });
       } else if(encryptionRules.contractType == "ERC1155") {
@@ -494,7 +561,7 @@ export function generateAccessControlConditionsForPosts(encryptionRules) {
           ],
           returnValueTest: {
             comparator: '>=',
-            value: encryptionRules.minTokenBalance
+            value: encryptionRules.minTokenBalance.toString()
           }
         });
       } else if(encryptionRules.contractType == "SolanaContract") {
@@ -508,7 +575,7 @@ export function generateAccessControlConditionsForPosts(encryptionRules) {
           returnValueTest: {
             key: "$.amount",
             comparator: ">=",
-            value: encryptionRules.minTokenBalance,
+            value: encryptionRules.minTokenBalance.toString(),
           },
         });
       }
