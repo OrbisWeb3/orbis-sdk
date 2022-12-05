@@ -607,8 +607,8 @@ export class Orbis {
 	/** Authenticate a did with a seed */
 	async connectWithSeed(seed) {
 		/** Create the provider and resolve it */
-		const provider = new Ed25519Provider(seed)
-	  const did = new DID({ provider, resolver: getResolver() })
+		const provider = new Ed25519Provider(seed);
+		const did = new DID({ provider, resolver: getResolver() })
 
 		/** Authenticate the Did */
 		await did.authenticate()
