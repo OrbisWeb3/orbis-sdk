@@ -1514,7 +1514,8 @@ export class Orbis {
 			user_did: this.session.id,
 			notif_type: options.type,
 			q_context: options.context ? options.context : null,
-			q_conversation_id: options.conversation_id ? options.conversation_id : null
+			q_conversation_id: options.conversation_id ? options.conversation_id : null,
+			q_last_read: options.last_read_timestamp ? options.last_read_timestamp : 0
 		}).single();
 		return({ data, error, status });
 	}
