@@ -656,6 +656,12 @@ export class Orbis {
 
   /** Connected users can share a new post following our schemas */
   async createPost(content, encryptionRules = null) {
+		/** User must be connected to call this function. */
+		if(!this.session || !this.session.id) {
+			console.log("User must be connected to create a post. Make sure to call the connect or isConnected function and to use the same orbis object across your application.");
+			return({ data: null, error: "User must be connected to call this function." });
+		}
+
 		/** Make sure post isn't empty */
 		if(!content || !content.body || content.body == "" || content.body == undefined) {
 			return {
@@ -694,6 +700,12 @@ export class Orbis {
 
 	/** Connected users can edit their post */
   async editPost(stream_id, content, encryptionRules = null) {
+		/** User must be connected to call this function. */
+		if(!this.session || !this.session.id) {
+			console.log("User must be connected to call this function. Make sure to call the connect or isConnected function and to use the same orbis object across your application.");
+			return({ data: null, error: "User must be connected to call this function." });
+		}
+
 		/** Make sure post isn't empty */
 		if(!content || !content.body || content.body == "" || content.body == undefined) {
 			return {
@@ -740,6 +752,12 @@ export class Orbis {
 
 	/** Connected users can react to an existing post */
 	async react(post_id, type) {
+		/** User must be connected to call this function. */
+		if(!this.session || !this.session.id) {
+			console.log("User must be connected to call this function. Make sure to call the connect or isConnected function and to use the same orbis object across your application.");
+			return({ data: null, error: "User must be connected to call this function." });
+		}
+
 		/** Require post_id */
 		if(!post_id || post_id == undefined) {
 			return {
@@ -769,6 +787,12 @@ export class Orbis {
 
 	/** Users can create or update a new group which can be used as a context when sharing posts */
 	async createGroup(content) {
+		/** User must be connected to call this function. */
+		if(!this.session || !this.session.id) {
+			console.log("User must be connected to call this function. Make sure to call the connect or isConnected function and to use the same orbis object across your application.");
+			return({ data: null, error: "User must be connected to call this function." });
+		}
+
 		/** Try to create a new Orbis group stream */
 		let result = await this.createTileDocument(content, ["orbis", "group"], groupSchemaCommit);
 
@@ -1124,6 +1148,13 @@ export class Orbis {
 
 	/** Helper to create a basic TileDocument on Ceramic */
 	async createTileDocument(content, tags, schema, family = "orbis") {
+
+		/** User must be connected to call this function. */
+		if(!this.session || !this.session.id) {
+			console.log("User must be connected to call this function. Make sure to call the connect or isConnected function and to use the same orbis object across your application.");
+			return({ data: null, error: "User must be connected to call this function." });
+		}
+
 		let res;
 
 		/** Try to create TileDocument */
@@ -1457,24 +1488,12 @@ export class Orbis {
 			return({ data: null, error: "User must be connected to retrieve notifications.", status });
 		}
 
-		/** Query with options details */
-		switch (options.type) {
-			case "social":
-				query = this.api.rpc("orbis_f_notifications", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "social" });
-				break;
+		let { data, error, status } = await this.api.rpc("orbis_f_notifications_alpha", {
+			user_did: this.session.id,
+			notif_type: options.type,
+			q_context: options.context ? options.context : null
+		});
 
-			case "social_in_context":
-				query = this.api.rpc("orbis_f_notifications_context", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "social", context_id: options.context });
-				break;
-
-			case "messages":
-				query = this.api.rpc("orbis_f_notifications", { user_did: this.session && this.session ? this.session.id : "none", notif_type: "messages" });
-				break;
-			default:
-
-		}
-
-		let { data, error, status } = await query;
 		return({ data, error, status });
 	}
 
@@ -1491,7 +1510,12 @@ export class Orbis {
 			return({ data: null, error: "User must be connected to retrieve notifications." });
 		}
 
-		let { data, error, status } = await this.api.rpc("orbis_f_count_notifications", { user_did: this.session.id, notif_type: options.type }).single();
+		let { data, error, status } = await this.api.rpc("orbis_f_count_notifications_alpha", {
+			user_did: this.session.id,
+			notif_type: options.type,
+			q_context: options.context ? options.context : null,
+			q_conversation_id: options.conversation_id ? options.conversation_id : null
+		}).single();
 		return({ data, error, status });
 	}
 

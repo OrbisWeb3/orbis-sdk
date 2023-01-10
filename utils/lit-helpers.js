@@ -1,4 +1,4 @@
-import LitJsSdk from 'lit-js-sdk'
+import LitJsSdk from "@lit-protocol/sdk-browser";
 const { signAndSaveAuthMessage } = LitJsSdk;
 import { toUtf8Bytes } from "@ethersproject/strings";
 import { hexlify } from "@ethersproject/bytes";

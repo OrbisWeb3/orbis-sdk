@@ -1,6 +1,3 @@
-/** Replaces localStorage in React Native */
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 /** Store class to use localStorage or AsyncStorage */
 export class Store {
 	/** Type of storage we want to use: 'localStorage' or 'AsyncStorage' */
@@ -29,8 +26,8 @@ export class Store {
 				return true;
 
 			/** Async storage */
-			case "AsyncStorage":
-				await AsyncStorage.setItem(key, value);
+			default:
+				await this.type.setItem(key, value);
 				return true;
 		}
 	}

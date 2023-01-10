@@ -1,9 +1,8 @@
-import { Buffer } from 'buffer';
+//import { Buffer } from 'buffer';
 import Resizer from "react-image-file-resizer";
 import { indexer } from '../lib/indexer-db.js';
 
 /** To generate dids from a Seed */
-import { DID } from 'dids'
 import { Ed25519Provider } from 'key-did-provider-ed25519'
 import { getResolver } from 'key-did-resolver'
 
