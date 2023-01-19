@@ -9,6 +9,7 @@ import { getResolver } from 'key-did-resolver'
 /** Manage did:pkh */
 import { EthereumWebAuth, getAccountId } from '@didtools/pkh-ethereum'
 import { SolanaWebAuth, getAccountIdByNetwork} from '@didtools/pkh-solana'
+import { TezosWebAuth, getAccountId as getTzAccountId } from '@didtools/pkh-tezos';
 
 /** Force index a stream. This shouldn't be necessary because our indexer picks up all new streams automatically but at least we are 100% sure. */
 export async function forceIndex(stream_id) {
@@ -239,6 +240,18 @@ export async function getAuthMethod(provider, chain) {
   				result: "Error creating Ethereum provider object for Ceramic."
   			}
   		}
+      break;
+
+    /** Handle Tezos wallets */
+    case "tezos":
+      let tzActiveAccount = await provider.getActiveAccount();
+      if (!tzActiveAccount) {
+        const permissions = await provider.requestPermissions();
+        tzActiveAccount = permissions;
+      }
+      address = await tzActiveAccount.address;
+      accountId = await getTzAccountId(provider, address);
+      authMethod = await TezosWebAuth.getAuthMethod(provider, accountId, publicKey);
       break;
   }
 

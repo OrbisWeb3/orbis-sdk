@@ -19,21 +19,25 @@ let litMumbai;
 let litReady = false;
 export async function connectLitClient() {
   let ready;
-  lit = new LitJsSdk.LitNodeClient({
-    alertWhenUnauthorized: false,
-    debug: false
-  });
-  await lit.connect();
-  console.log("Lit is ready now!");
-  litReady = true;
+  try {
+    lit = new LitJsSdk.LitNodeClient({
+      alertWhenUnauthorized: false,
+      debug: false
+    });
+    await lit.connect();
+    console.log("Lit is ready now!");
+    litReady = true;
+  } catch(e) {
+    console.log("Error connecting to Lit:, e");
+  }
 
-  /** Connect to Lit Mumbai */
+  /** Connect to Lit Mumbai
   litMumbai = new LitJsSdk.LitNodeClient({
     litNetwork: "mumbai",
     alertWhenUnauthorized: false,
     debug: false
   });
-  await litMumbai.connect();
+  await litMumbai.connect();*/
 }
 
 /** Returns lit object */
@@ -160,6 +164,10 @@ export async function generateLitSignatureV2(provider, account, providerNetwork,
       store.setItem("lit-auth-signature", JSON.stringify(authSig));
       break;
   }
+
+  /** Step 3: Save signature in local storage while referencing address */
+  let __authSig = await getAuthSig(store)
+  store.setItem("lit-auth-signature-" + account, JSON.stringify(__authSig));
 
   /** Step 3: Return results */
   return {

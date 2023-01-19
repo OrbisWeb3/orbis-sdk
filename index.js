@@ -89,6 +89,7 @@ export class Orbis {
 	 * already connected within their application
 	 */
 	constructor(options) {
+		console.log("Initiating Orbis with: ", options);
 		if(options && options.ceramic) {
 			/** Initialize the Orbis object using the Ceramic object passed in the option */
 			this.ceramic = options.ceramic;
@@ -134,7 +135,8 @@ export class Orbis {
 		}
 
 		/** Connect to Lit */
-		if(!options || (options.useLit != false)) {
+		if(!options || options.useLit != false) {
+			console.log("Connecting to Lit.");
 			connectLitClient();
 		}
 
@@ -397,19 +399,17 @@ export class Orbis {
 		/** Step 4: Assign did to Ceramic object  */
 		this.ceramic.did = did;
 
-		/** Step 5 (optional): Initialize the connection to Lit */
-		if(lit == true) {
-			let _userAuthSig = await this.store.getItem("lit-auth-signature-" + address);
-			if(!_userAuthSig || _userAuthSig == "" || _userAuthSig == undefined) {
-				try {
-					/** Generate the signature for Lit */
-					let resLitSig = await generateLitSignatureV2(provider, address, chain, this.store);
-				} catch(e) {
-					console.log("Error connecting to Lit network: " + e);
-				}
-			} else {
-				/** User is already connected, save current accoutn signature in lit-auth-signature object for easy retrieval */
-				await this.store.setItem("lit-auth-signature", _userAuthSig);
+		/** Step 5 (optional): Initialize the connection to Lit and generate signature if requested by developer */
+		let _userAuthSig = await this.store.getItem("lit-auth-signature-" + address);
+		if(_userAuthSig) {
+			await this.store.setItem("lit-auth-signature", _userAuthSig);
+		}
+		if(lit == true && (!_userAuthSig || _userAuthSig == "" || _userAuthSig == undefined)) {
+			try {
+				/** Generate the signature for Lit */
+				let resLitSig = await generateLitSignatureV2(provider, address, chain, this.store);
+			} catch(e) {
+				console.log("Error connecting to Lit network: " + e);
 			}
 		}
 
@@ -499,6 +499,11 @@ export class Orbis {
 		let { data, error, status } = await this.getProfile(this.session.id);
 
 		/** Check if user has configured Lit */
+		let _userAuthSig = await this.store.getItem("lit-auth-signature-" + address);
+		if(_userAuthSig) {
+			await this.store.setItem("lit-auth-signature", _userAuthSig);
+		}
+
 		let hasLit = false;
 		let hasLitSig = await this.store.getItem("lit-auth-signature");
 		if(hasLitSig) {
@@ -565,8 +570,18 @@ export class Orbis {
 
 		/** Initialize the connection to Lit */
 		try {
-			/** Generate the signature for Lit */
-			let resLitSig = await generateLitSignatureV2(provider, address, this.chain);
+			let _userAuthSig = await this.store.getItem("lit-auth-signature-" + address);
+			if(!_userAuthSig || _userAuthSig == "" || _userAuthSig == undefined) {
+				try {
+					/** Generate the signature for Lit */
+					let resLitSig = await generateLitSignatureV2(provider, address, this.chain, this.store);
+				} catch(e) {
+					console.log("Error connecting to Lit network: " + e);
+				}
+			} else {
+				/** User is already connected, save current account signature in lit-auth-signature object for easy retrieval */
+				await this.store.setItem("lit-auth-signature", _userAuthSig);
+			}
 
 			/** Return success state */
 			return {
@@ -1491,7 +1506,9 @@ export class Orbis {
 		let { data, error, status } = await this.api.rpc("orbis_f_notifications_alpha", {
 			user_did: this.session.id,
 			notif_type: options.type,
-			q_context: options.context ? options.context : null
+			q_context: options.context ? options.context : null,
+			q_conversation_id: options.conversation_id ? options.conversation_id : null,
+			q_last_read: options.last_read_timestamp ? options.last_read_timestamp : 0
 		});
 
 		return({ data, error, status });
