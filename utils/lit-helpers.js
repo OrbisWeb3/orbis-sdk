@@ -141,7 +141,6 @@ export async function generateLitSignature(provider, account, providerNetwork, s
 
 /** Attempt at using SIWE for Lit */
 export async function generateLitSignatureV2(provider, account, providerNetwork, store) {
-  console.log("Enter generateLitSignatureV2() with account:", account);
   switch (providerNetwork) {
     /** Support for EVM chains */
     case "ethereum":
@@ -189,12 +188,17 @@ async function getAuthSig(store) {
 }
 
 /** Decrypt a string using Lit based on a set of inputs. */
-export async function decryptString(encryptedContent, chain, store) {
+export async function decryptString(encryptedContent, chain, store, forcedAuthSig = null) {
   /** Make sure Lit is ready before trying to decrypt the string */
   await litIsReady();
 
-  /** Retrieve AuthSig */
-  let authSig = await getAuthSig(store);
+  /** Retrieve AuthSig or used the one passed as a parameter */
+  let authSig;
+  if(forcedAuthSig) {
+    authSig = forcedAuthSig;
+  } else {
+    authSig = await getAuthSig(store);
+  }
 
   /** Decode string encoded as b64 to be supported by Ceramic */
   let decodedString;

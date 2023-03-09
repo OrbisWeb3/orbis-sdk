@@ -19,6 +19,7 @@ import {
 	generateAccessControlConditionsForDMs,
 	encryptDM,
 	encryptPost,
+	encryptString,
 	decryptString
 } from "./utils/lit-helpers.js";
 
@@ -26,6 +27,7 @@ import {
 import { indexer } from './lib/indexer-db.js';
 import {
 	forceIndex,
+	fetchUserCredentials,
 	forceIndexDid,
 	sleep,
 	randomSeed,
@@ -37,7 +39,7 @@ import {
 import { authenticatePkp } from "./utils/ceramic-helpers.js"
 
 /** Initiate the node URLs for the two networks */
-const MAINNET_NODE_URL = "https://node1.orbis.club/";
+const MAINNET_NODE_URL = "https://node2.orbis.club/";
 const TESTNET_NODE_URL = "https://ceramic-clay.3boxlabs.com";
 let PINATA_GATEWAY = "https://orbis.mypinata.cloud/ipfs/";
 let PINATA_API_KEY = null;
@@ -45,7 +47,7 @@ let PINATA_SECRET_API_KEY = null;
 
 /** Set schemas Commit IDs */
 const postSchemaStream = "kjzl6cwe1jw1498inegtpji0iqf0htspb0qqswlofjy0hak1s3u2pf19qql7oak";
-const postSchemaCommit = "k1dpgaqe3i64kjuyet4w0zyaqwamf9wrp1jim19y27veqkppo34yghivt2pag4wxp0fv2yl4hedynpfuynp2wvd8s7ctabea6lx732xrr8b0cgqauwlh0vwg6";
+const postSchemaCommit = "k1dpgaqe3i64kjuyet4w0zyaqwamf9wrp1jim19y27veqkppo34yghivt2pag4wxp0fv2yl04ypy3enwg9eisk6zkcq0a8buskv2tyq5rlldhi2vg3fkmfug4";
 
 const groupSchemaStream = "kjzl6cwe1jw1487a0xluwl3ip6lcdcfn8ahgomsbf8x5rf65mktdjuouz8xopbf";
 const groupSchemaCommit = "k3y52l7qbv1fry2bramzfrq10z2vrywf96yk6n61d8ffsyzvs0k0wd68sanjjo16o";
@@ -53,8 +55,11 @@ const groupSchemaCommit = "k3y52l7qbv1fry2bramzfrq10z2vrywf96yk6n61d8ffsyzvs0k0w
 const channelSchemaStream = "kjzl6cwe1jw148ehiqrzh9npfr4kk4kyqd4as259yqzcr3i1dnrnm30ck5q0t6f";
 const channelSchemaCommit = "k1dpgaqe3i64kjsvqaacts7pw2j419foun3d53gbyiv90gguufsv529yaq55rh0gmo68o5nft4ja7xmrtq9x1is59hn1ibx16d1e5wzg4tdxtutmegh2hy1a6";
 
+const encryptedEmailSchemaStream = "kjzl6cwe1jw147ztpbqz564o0ym42q794j8vf8a9oefny88brcr874jt02j17iw";
+const encryptedEmailSchemaCommit = "k3y52l7qbv1fry0ur83jtwrl6uu58zebkw8v3gax0tinebej7mipmaocu8hzclibk";
+
 const profileSchemaStream = "kjzl6cwe1jw145ak5a52cln1i6ztmece01w5qd03dib4lg8i3tt57sjauu14be8";
-const profileSchemaCommit = "k3y52l7qbv1frxhn39k40plvupdqqna03kdgorggo0274ojggr7z93ex979jyp14w";
+const profileSchemaCommit = "k1dpgaqe3i64kjl5e5a6qgzaczsht05dra2f5jy2ff8lyk0maaxgnic72oqa21n40kt87t5qi8tu8kyt8xt3bkcirey1it476ptgt2omc66kfnldo1jbs4v9v";
 
 const reactionSchemaStream = "kjzl6cwe1jw146a2jirsoiku1eqsckmk8o7egba22jufwenwbb9fs096s340efk";
 const reactionSchemaCommit = "k3y52l7qbv1frxonm2thnyc45m0uhleofxo4ms07iq54h2g9xsg3475tc7q4iumm8";
@@ -89,7 +94,7 @@ export class Orbis {
 	 * already connected within their application
 	 */
 	constructor(options) {
-		console.log("Initiating Orbis with: ", options);
+		console.log("Initiating Orbis with options: ", options);
 		if(options && options.ceramic) {
 			/** Initialize the Orbis object using the Ceramic object passed in the option */
 			this.ceramic = options.ceramic;
@@ -890,6 +895,33 @@ export class Orbis {
 		return result;
 	}
 
+	/** Will encryt the user's email address and store it on Ceramic */
+	async setEmail(email) {
+		/** Make sure group_id is available */
+		if(!email) {
+			console.log("`email` is required.");
+			return {
+				status: 300,
+				result: "`email` is required."
+			}
+		}
+
+		/** Encrypt email address */
+		let encryptedEmail = await this.encryptEmail(email);
+
+		/** Create stream content */
+		let content = {
+			encryptedEmail: encryptedEmail
+		}
+
+		/** Try to create the stream */
+		let result = await this.createTileDocument(content, ["orbis", "email"], encryptedEmailSchemaCommit);
+		return {
+			...result,
+			encryptedEmail: encryptedEmail
+		};
+	}
+
 	/** Users can follow other users */
 	async setFollow(did, active = true) {
 		/** Make sure group_id is available */
@@ -1436,8 +1468,22 @@ export class Orbis {
 	}
 
 	/** Get Verified Credentials from user */
-	async getCredentials(did) {
-		let { data, error, status } = await this.api.from("verified_credentials").select().ilike('subject_id', did);
+	async getCredentials(did, options) {
+	  let q_issuer = null;
+		let q_min_weight = 0;
+	  let q_offset = 0;
+
+	  if(options) {
+	    q_issuer = options.issuer ? options.issuer : null;
+			q_min_weight = options.min_weight ? options.min_weight : 0;
+			q_offset = options.offset ? options.offset : 0;
+	  }
+
+	  let { data, error, status } = await this.api.rpc("get_verifiable_credentials", {
+	    q_subject: did,
+	    q_min_weight: q_min_weight,
+	    q_offset: q_offset
+	  });
 
 		/** Return results */
 		return({ data, error, status });
@@ -1581,4 +1627,19 @@ export class Orbis {
 		/** Return results */
 		return({ data, error, status });
 	}
+
+	/** Will encrypt the email using the Orbis and User address in access control conditions  */
+	async encryptEmail(email) {
+		if(!this.session || !this.session.id) {
+			console.log("Make sure that user is connected before calling the encryptEmail function.");
+			return null;
+		}
+		let ORBIS_DID = "did:pkh:eip155:1:0xdbcf111ca51572e2f924587faeab857f1e3b824f";
+		let { accessControlConditions } = generateAccessControlConditionsForDMs([this.session.id, ORBIS_DID]);
+		let encryptedEmail = await encryptString(email, "ethereum", accessControlConditions);
+		return encryptedEmail;
+	}
 }
+
+/** Additional exports */
+export { generateAccessControlConditionsForDMs, encryptString, decryptString, connectLitClient };

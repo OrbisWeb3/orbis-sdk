@@ -37,6 +37,20 @@ export async function forceIndex(stream_id) {
   }
 }
 
+/** Will query our Node to fetch credentials for this did */
+export async function fetchUserCredentials(did) {
+  try {
+    console.log("Fetching credentials for a did.")
+    let res = await fetch("https://api.orbis.club/mint-credentials/" + did, {
+      method: 'GET'
+    });
+    let result = await res.json();
+    console.log("Fetched credentials.");
+  } catch(e) {
+    console.log("Error fetching credentials.");
+  }
+}
+
 /** Generate a random seed that can be used to authenticate a new did:key */
 export function randomSeed() {
   const buffer = new Uint8Array(32);
@@ -54,6 +68,11 @@ export async function forceIndexDid(did) {
     }
   };
   let _result;
+
+  /** Mint verifiable credentials the user is eligible for */
+  fetchUserCredentials(did);
+
+  /** Index DID */
   try {
     let _result_api = await fetch("https://api.orbis.club/index-orbis-did/" + did, requestOptions);
     _result = await _result_api.json();
