@@ -69,9 +69,6 @@ export async function forceIndexDid(did) {
   };
   let _result;
 
-  /** Mint verifiable credentials the user is eligible for */
-  fetchUserCredentials(did);
-
   /** Index DID */
   try {
     let _result_api = await fetch("https://api.orbis.club/index-orbis-did/" + did, requestOptions);

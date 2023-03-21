@@ -261,6 +261,9 @@ export class Orbis {
 		/** Step 6: Force index did to retrieve blockchain details automatically */
 		let _resDid = await forceIndexDid(this.session.id);
 
+		/** Will check if user has new credentials available  */
+		fetchUserCredentials(this.session.id);
+
 		/** Step 7: Get user profile details */
 		let { data, error, status } = await this.getProfile(this.session.id);
 
@@ -382,7 +385,6 @@ export class Orbis {
 						expiresInSecs: threeMonths
 					}
 				);
-				console.log("this.session", this.session);
 				did = this.session.did;
 			} catch(e) {
 				return {
@@ -420,6 +422,9 @@ export class Orbis {
 
 		/** Step 6: Force index did to retrieve blockchain details automatically */
 		let _resDid = await forceIndexDid(this.session.id);
+
+		/** Will check if user has new credentials available  */
+		fetchUserCredentials(this.session.id);
 
 		/** Step 7: Get user profile details */
 		let { data, error, status } = await this.getProfile(this.session.id);
@@ -1065,11 +1070,11 @@ export class Orbis {
 	/** Function to upload a media to Orbis */
 	async uploadMedia(file) {
 		console.log("Enter uploadMedia with: ", file);
+		/** Making user has setup its Pinata keys */
 		if(!PINATA_API_KEY) {
 			console.log("You haven't setup your PINATA_API_KEY yet.");
 			return {
 				status: 300,
-				error: e,
 				result: "You haven't setup your PINATA_API_KEY yet."
 			}
 		}
@@ -1078,35 +1083,9 @@ export class Orbis {
 			console.log("You haven't setup your PINATA_SECRET_API_KEY yet.");
 			return {
 				status: 300,
-				error: e,
 				result: "You haven't setup your PINATA_SECRET_API_KEY yet."
 			}
 		}
-
-		/** Try to resize media
-		try {
-			switch(file.type) {
-	      case "image/gif":
-          console.log("This is a GIF, we can't resize it.");
-          break;
-	      case "image/png":
-          mediaToUpload = await resizeFile(file, 1024, "PNG", "file");
-          break;
-	      case "image/jepg":
-          mediaToUpload = await resizeFile(file, 1024, "JPEG", "file");
-          break;
-	      default:
-          mediaToUpload = await resizeFile(file, 1024, "PNG", "file");
-          break;
-	    }
-		} catch(e) {
-			return {
-				status: 300,
-				error: e,
-				result: "Error resizing media."
-			}
-		}
-		*/
 
 		/** Try to upload resized image to IPFS*/
     try {
@@ -1342,36 +1321,36 @@ export class Orbis {
 	 * Retrieve posts shared in a specific context or by a specific user
 	 * Returns an array of posts in the `data` field or an `error`.
 	 */
-	async getPosts(options, page = 0) {
+	async getPosts(options, page = 0, limit = 50) {
 		let query;
 
 		/** Default query for global feed, developers can pass an algorithm ID to order the posts */
 		if(options?.algorithm) {
 			switch (options.algorithm) {
 				case "recommendations":
-					query = this.api.rpc("orbis_recommendations", { user_did: this.session && this.session ? this.session.id : "none" }).range(page * 50, (page + 1) * 50 - 1);
+					query = this.api.rpc("orbis_recommendations", { user_did: this.session && this.session ? this.session.id : "none" }).range(page * limit, (page + 1) * limit - 1);
 					break;
 				case "all-posts":
-					query = this.api.rpc("all_posts").range(page * 50, (page + 1) * 50 - 1);
+					query = this.api.rpc("all_posts").range(page * limit, (page + 1) * limit - 1);
 					break;
 				case "all-master-posts":
-					query = this.api.rpc("all_master_posts").range(page * 50, (page + 1) * 50 - 1);
+					query = this.api.rpc("all_master_posts").range(page * limit, (page + 1) * limit - 1);
 					break;
 				case "all-did-master-posts":
 					if(options && options.context) {
 						query = this.api.rpc("all_did_master_posts_with_context", { post_did: options?.did, post_context: options.context }).range(page * 50, (page + 1) * 50 - 1);
 					} else {
-						query = this.api.rpc("all_did_master_posts", { post_did: options?.did }).range(page * 50, (page + 1) * 50 - 1);
+						query = this.api.rpc("all_did_master_posts", { post_did: options?.did }).range(page * limit, (page + 1) * limit - 1);
 					}
 					break;
 				case "all-context-master-posts":
-					query = this.api.rpc("all_context_master_posts", { post_context: options?.context }).range(page * 50, (page + 1) * 50 - 1);
+					query = this.api.rpc("all_context_master_posts", { post_context: options?.context }).range(page * limit, (page + 1) * limit - 1);
 					break;
 				case "all-posts-non-filtered":
-					query = this.api.rpc("all_posts_non_filtered").range(page * 50, (page + 1) * 50 - 1);
+					query = this.api.rpc("all_posts_non_filtered").range(page * limit, (page + 1) * limit - 1);
 					break;
 				default:
-					query = this.api.from("orbis_v_posts").select().range(page * 50, (page + 1) * 50 - 1).order('timestamp', { ascending: false });
+					query = this.api.from("orbis_v_posts").select().range(page * limit, (page + 1) * limit - 1).order('timestamp', { ascending: false });
 					break;
 			}
 		}
@@ -1383,7 +1362,7 @@ export class Orbis {
 				q_only_master: options?.only_master ? options.only_master : false,
 				q_context: options?.context ? options.context : null,
 				q_master: options?.master ? options.master : null
-			}).range(page * 50, (page + 1) * 50 - 1).order('timestamp', { ascending: false });
+			}).range(page * limit, (page + 1) * limit - 1).order('timestamp', { ascending: false });
 		}
 
 		/** Query indexer */
