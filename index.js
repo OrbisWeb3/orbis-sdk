@@ -1356,12 +1356,14 @@ export class Orbis {
 		}
 
 		else {
-		  query = this.api.rpc("default_posts_alpha", {
+		  query = this.api.rpc("default_posts_03", {
 				q_did: options?.did ? options.did : null,
 				q_tag: options?.tag ? options.tag : null,
 				q_only_master: options?.only_master ? options.only_master : false,
 				q_context: options?.context ? options.context : null,
-				q_master: options?.master ? options.master : null
+				q_master: options?.master ? options.master : null,
+				q_include_child_contexts: options?.include_child_contexts ? options.include_child_contexts : false,
+				q_term: options?.term ? options.term : null
 			}).range(page * limit, (page + 1) * limit - 1).order('timestamp', { ascending: false });
 		}
 
