@@ -1,5 +1,5 @@
 # Build decentralized social apps with the Orbis SDK
-By using the Orbis SDK, developers can build their own decentralized social apps or add a decentralized social layer to their existing application in a very easy and performant way.
+By using the Orbis SDK, developers can build their own decentralized social apps or add a decentralized social features to their existing application in a very easy and performant way.
 
 ## Why you should build on Orbis
 By being built on top of Ceramic, Orbis offers many advantages to developers interested in building decentralized social applications:
@@ -14,7 +14,7 @@ By being built on top of Ceramic, Orbis offers many advantages to developers int
 ## Use cases
 Here are some examples of applications that could be built on top of Orbis:
 
-- Full social apps like [orbis.club](https://orbis.club)
+- Full social apps like [orbis.club](https://app.orbis.club)
 - Decentralized & encrypted messaging system
 - Fully customizable & embedded group chat servers
 - Decentralized Discourse governance forums
@@ -24,4 +24,4 @@ Here are some examples of applications that could be built on top of Orbis:
 - And many other things...
 
 ## Documentation
-Our documentation is available at https://orbis.club/developers
+Our documentation is available at https://useorbis.com/documentation

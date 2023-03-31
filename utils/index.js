@@ -30,7 +30,7 @@ export async function forceIndex(stream_id) {
     } else {
       console.log("Error indexing stream " + stream_id + ":", res_final.result);
     }
-    return;
+    return res_final;
   } catch(e) {
     console.log("Error indexing new stream: ", e);
     return;
@@ -49,6 +49,24 @@ export async function fetchUserCredentials(did) {
   } catch(e) {
     console.log("Error fetching credentials.");
   }
+}
+
+/** Will format the conversation object for the createConversation and updateConversation objects */
+export async function formatConversation(content) {
+  /** Add sender to the list of recipients to make sure it can decrypt the messages as well */
+  let _content = {...content};
+  let recipients = _content.recipients;
+  recipients.push(this.session.id);
+
+  /** If conversation has a name we encrypt oit */
+  if(content.name) {
+    let { accessControlConditions } = generateAccessControlConditionsForDMs(recipients);
+    let encryptedConversationName = await encryptString(content.name, "ethereum", accessControlConditions);
+    _content.encryptedName = encryptedConversationName;
+    _content.name = "";
+  }
+
+  return _content;
 }
 
 /** Generate a random seed that can be used to authenticate a new did:key */

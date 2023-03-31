@@ -34,7 +34,8 @@ import {
 	sortByKey,
 	getAuthMethod,
 	getAddressFromDid,
-	resizeFile
+	resizeFile,
+	formatConversation
 } from "./utils/index.js";
 import { authenticatePkp } from "./utils/ceramic-helpers.js"
 
@@ -51,6 +52,9 @@ const postSchemaCommit = "k1dpgaqe3i64kjuyet4w0zyaqwamf9wrp1jim19y27veqkppo34ygh
 
 const groupSchemaStream = "kjzl6cwe1jw1487a0xluwl3ip6lcdcfn8ahgomsbf8x5rf65mktdjuouz8xopbf";
 const groupSchemaCommit = "k3y52l7qbv1fry2bramzfrq10z2vrywf96yk6n61d8ffsyzvs0k0wd68sanjjo16o";
+
+const contextSchemaStream = "";
+const contextSchemaCommit = "";
 
 const channelSchemaStream = "kjzl6cwe1jw148ehiqrzh9npfr4kk4kyqd4as259yqzcr3i1dnrnm30ck5q0t6f";
 const channelSchemaCommit = "k1dpgaqe3i64kjsvqaacts7pw2j419foun3d53gbyiv90gguufsv529yaq55rh0gmo68o5nft4ja7xmrtq9x1is59hn1ibx16d1e5wzg4tdxtutmegh2hy1a6";
@@ -662,17 +666,17 @@ export class Orbis {
 	}
 
 	/** Save the last read time for notifications for the connected user */
-	async setNotificationsReadTime(type, timestamp, context = null) {
+	async setNotificationsReadTime(options) {
 		let result;
-		if(context) {
+		if(options.context) {
 			/** Create tile with the settings details, including context */
 			result = await this.createTileDocument({
-				last_notifications_read_time: timestamp,
-				context: context
-			}, ["orbis", "settings", "notifications", type], notificationsReadSchemaCommit);
+				last_notifications_read_time: options.timestamp,
+				context: options.context
+			}, ["orbis", "settings", "notifications", options.type], notificationsReadSchemaCommit);
 		} else {
 			/** Create tile with the settings details */
-			result = await this.createTileDocument({last_notifications_read_time: timestamp}, ["orbis", "settings", "notifications", type], notificationsReadSchemaCommit);
+			result = await this.createTileDocument({last_notifications_read_time: options.timestamp}, ["orbis", "settings", "notifications", options.type], notificationsReadSchemaCommit);
 		}
 
 		/** Return confirmation results */
@@ -964,13 +968,9 @@ export class Orbis {
 		return result;
 	}
 
-	/** Update a post */
-	async updatePost(stream_id, body) {
-
-	}
-
 	/** Create a new conversation */
 	async createConversation(content) {
+
 		/** Make sure recipients field isn't empty */
 		if(!content || !content.recipients || content.recipients.length == 0) {
 			return {
@@ -980,20 +980,62 @@ export class Orbis {
 			}
 		}
 
+		/** Will format the conversation to return a clean content object */
 		/** Add sender to the list of recipients to make sure it can decrypt the messages as well */
-		let _content = {...content};
-		let recipients = _content.recipients;
-		recipients.push(this.session.id);
+	  let _content = {...content};
+	  let recipients = _content.recipients;
+	  recipients.push(this.session.id);
+
+	  /** If conversation has a name we encrypt oit */
+	  if(content.name) {
+	    let { accessControlConditions } = generateAccessControlConditionsForDMs(recipients);
+	    let encryptedConversationName = await encryptString(content.name, "ethereum", accessControlConditions);
+	    _content.encryptedName = encryptedConversationName;
+	    _content.name = "";
+	  }
 
 		/** Create tile */
-		let result = await this.createTileDocument(_content, ["orbis", "conversation"], conversationSchemaCommit);
+		let result = await this.createTileDocument(_content, ["orbis", "conversation"], conversationSchemaCommit, "orbis", true);
+
+		/** Return confirmation results */
+		return result;
+	}
+
+	/** Update an existing conversation */
+	async updateConversation(stream_id, content) {
+
+		/** Make sure recipients field isn't empty */
+		if(!content || !content.recipients || content.recipients.length == 0) {
+			return {
+				status: 300,
+				error: e,
+				result: "You can't update a conversations without recipients."
+			}
+		}
+
+		/** Will format the conversation to return a clean content object */
+		/** Add sender to the list of recipients to make sure it can decrypt the messages as well */
+	  let _content = {...content};
+	  let recipients = _content.recipients;
+	  recipients.push(this.session.id);
+
+	  /** If conversation has a name we encrypt oit */
+	  if(content.name) {
+	    let { accessControlConditions } = generateAccessControlConditionsForDMs(recipients);
+	    let encryptedConversationName = await encryptString(content.name, "ethereum", accessControlConditions);
+	    _content.encryptedName = encryptedConversationName;
+	    _content.name = "";
+	  }
+
+		/** Update tile */
+		let result = await this.updateTileDocument(stream_id, _content, ["orbis", "conversation"], conversationSchemaCommit, "orbis", true);
 
 		/** Return confirmation results */
 		return result;
 	}
 
 	/** Send a direct message in a conversation */
-	async sendMessage(content) {
+	async sendMessage(content, data) {
 		/** Require `message` */
 		if(!content || !content.body || content.body == undefined || content.body == "") {
 			return {
@@ -1053,6 +1095,11 @@ export class Orbis {
 				conversation_id: content.conversation_id,
 				encryptedMessage: encryptedMessage,
 				encryptedMessageSolana: encryptedMessageSolana
+			}
+
+			/** Add custom data field if any */
+			if(data) {
+				_content.data = data;
 			}
 
 			/** Create tile for this message */
@@ -1160,12 +1207,34 @@ export class Orbis {
 		}
 	}
 
-	/** NOT AVAILABLE FOR NOW: Users can create or update a new context such as a group or a channel within a group to organize the posts being shared */
-	async createContext() {
+	/* Users can create a new context which can represent the project or app used by the developer */
+	async createContext(content) {
+		/** User must be connected to call this function. */
+		if(!this.session || !this.session.id) {
+			console.log("User must be connected to call this function. Make sure to call the connect or isConnected function and to use the same orbis object across your application.");
+			return({ data: null, error: "User must be connected to call this function." });
+		}
 
+		/** Try to create a new Orbis group stream */
+		let result = await this.createTileDocument(content, ["orbis", "context"], contextSchemaCommit);
+
+		/** Return confirmation results */
+		return result;
 	}
-	async updateContext() {
 
+	/** Will update an existing context */
+	async updateContext(stream_id, content) {
+		if(!stream_id) {
+			console.log("`stream_id` is required to update a context.");
+			return {
+				status: 300,
+				result: "`stream_id` is required to update a context."
+			}
+		}
+
+		/** Update TileDocument with new content */
+		let result = await this.updateTileDocument(stream_id, content, ["orbis", "context"], contextSchemaCommit);
+		return result;
 	}
 
 	/***********************
@@ -1173,7 +1242,7 @@ export class Orbis {
 	**********************/
 
 	/** Helper to create a basic TileDocument on Ceramic */
-	async createTileDocument(content, tags, schema, family = "orbis") {
+	async createTileDocument(content, tags, schema, family = "orbis", awaitIndex = false) {
 
 		/** User must be connected to call this function. */
 		if(!this.session || !this.session.id) {
@@ -1198,8 +1267,13 @@ export class Orbis {
 				},
 			);
 
-			/** Force index document */
-			forceIndex(doc.id.toString());
+			/** Await for indexing or not */
+			if(awaitIndex) {
+				await forceIndex(doc.id.toString());
+			} else {
+				forceIndex(doc.id.toString());
+			}
+
 
 			/** Return JSON with doc object */
 			res = {
@@ -1321,7 +1395,7 @@ export class Orbis {
 	 * Retrieve posts shared in a specific context or by a specific user
 	 * Returns an array of posts in the `data` field or an `error`.
 	 */
-	async getPosts(options, page = 0, limit = 50) {
+	async getPosts(options, page = 0, limit = 50, ascending = false) {
 		let query;
 
 		/** Default query for global feed, developers can pass an algorithm ID to order the posts */
@@ -1350,7 +1424,7 @@ export class Orbis {
 					query = this.api.rpc("all_posts_non_filtered").range(page * limit, (page + 1) * limit - 1);
 					break;
 				default:
-					query = this.api.from("orbis_v_posts").select().range(page * limit, (page + 1) * limit - 1).order('timestamp', { ascending: false });
+					query = this.api.from("orbis_v_posts").select().range(page * limit, (page + 1) * limit - 1).order('timestamp', { ascending: ascending });
 					break;
 			}
 		}
@@ -1364,7 +1438,7 @@ export class Orbis {
 				q_master: options?.master ? options.master : null,
 				q_include_child_contexts: options?.include_child_contexts ? options.include_child_contexts : false,
 				q_term: options?.term ? options.term : null
-			}).range(page * limit, (page + 1) * limit - 1).order('timestamp', { ascending: false });
+			}).range(page * limit, (page + 1) * limit - 1).order(options?.order_by ? options.order_by : 'timestamp', { ascending: ascending });
 		}
 
 		/** Query indexer */
@@ -1377,6 +1451,14 @@ export class Orbis {
 	/** Get post details */
 	async getPost(post_id) {
 		let { data, error, status } = await this.api.from("orbis_v_posts").select().eq('stream_id', post_id).single();
+
+		/** Return results */
+		return({ data, error, status });
+	}
+
+	/** Returns the details of a context */
+	async getContext(context_id) {
+		let { data, error, status } = await this.api.from("orbis_contexts").select().eq('stream_id', context_id).single();
 
 		/** Return results */
 		return({ data, error, status });
