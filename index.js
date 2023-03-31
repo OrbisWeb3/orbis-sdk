@@ -1612,12 +1612,13 @@ export class Orbis {
 			return({ data: null, error: "User must be connected to retrieve notifications.", status });
 		}
 
-		let { data, error, status } = await this.api.rpc("orbis_f_notifications_alpha", {
+		let { data, error, status } = await this.api.rpc("orbis_f_notifications_02", {
 			user_did: this.session.id,
 			notif_type: options.type,
 			q_context: options.context ? options.context : null,
 			q_conversation_id: options.conversation_id ? options.conversation_id : null,
-			q_last_read: options.last_read_timestamp ? options.last_read_timestamp : 0
+			q_last_read: options.last_read_timestamp ? options.last_read_timestamp : 0,
+			q_include_child_contexts: options.include_child_contexts ? options.include_child_contexts : false,
 		});
 
 		return({ data, error, status });
@@ -1636,12 +1637,13 @@ export class Orbis {
 			return({ data: null, error: "User must be connected to retrieve notifications." });
 		}
 
-		let { data, error, status } = await this.api.rpc("orbis_f_count_notifications_alpha", {
+		let { data, error, status } = await this.api.rpc("orbis_f_count_notifications_02", {
 			user_did: this.session.id,
 			notif_type: options.type,
 			q_context: options.context ? options.context : null,
 			q_conversation_id: options.conversation_id ? options.conversation_id : null,
-			q_last_read: options.last_read_timestamp ? options.last_read_timestamp : 0
+			q_last_read: options.last_read_timestamp ? options.last_read_timestamp : 0,
+			q_include_child_contexts: options.include_child_contexts ? options.include_child_contexts : false
 		}).single();
 		return({ data, error, status });
 	}
