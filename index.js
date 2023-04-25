@@ -53,8 +53,11 @@ const postSchemaCommit = "k1dpgaqe3i64kjuyet4w0zyaqwamf9wrp1jim19y27veqkppo34ygh
 const groupSchemaStream = "kjzl6cwe1jw1487a0xluwl3ip6lcdcfn8ahgomsbf8x5rf65mktdjuouz8xopbf";
 const groupSchemaCommit = "k3y52l7qbv1fry2bramzfrq10z2vrywf96yk6n61d8ffsyzvs0k0wd68sanjjo16o";
 
-const contextSchemaStream = "";
-const contextSchemaCommit = "";
+const projectSchemaStream = "kjzl6cwe1jw14936q0quh7drz7a97gw8yw3aoiflwmgsdlf4prnokwywfhhadfn";
+const projectSchemaCommit = "k1dpgaqe3i64kjul5j2lieylhdluzl3wrsae9dgn5n5akr80x6r18pbt68nsg7axlp5pn1warxxgcoq491r9aki0thj6a7goqiogab773qke2w20okq3s94z3";
+
+const contextSchemaStream = "kjzl6cwe1jw147dp34t1t88xu2rfltlats6grzav216ko7ocwqz2fgq8myjw8gw";
+const contextSchemaCommit = "k1dpgaqe3i64kjqc8pwu488zrftzkd0fxuex8ou82oc1utpl7nu1168fek2d9d5z00ma9ecmw6x017sievx7htbeaxnsv358ph6kzuyb8pkicv6juxe680910";
 
 const channelSchemaStream = "kjzl6cwe1jw148ehiqrzh9npfr4kk4kyqd4as259yqzcr3i1dnrnm30ck5q0t6f";
 const channelSchemaCommit = "k1dpgaqe3i64kjsvqaacts7pw2j419foun3d53gbyiv90gguufsv529yaq55rh0gmo68o5nft4ja7xmrtq9x1is59hn1ibx16d1e5wzg4tdxtutmegh2hy1a6";
@@ -1207,6 +1210,36 @@ export class Orbis {
 		}
 	}
 
+	/* Users can create a new project that can be used to organize contexts created */
+	async createProject(content) {
+		/** User must be connected to call this function. */
+		if(!this.session || !this.session.id) {
+			console.log("User must be connected to call this function. Make sure to call the connect or isConnected function and to use the same orbis object across your application.");
+			return({ data: null, error: "User must be connected to call this function." });
+		}
+
+		/** Try to create a new Orbis group stream */
+		let result = await this.createTileDocument(content, ["orbis", "project"], projectSchemaCommit);
+
+		/** Return confirmation results */
+		return result;
+	}
+
+	/** Will update an existing project */
+	async updateProject(stream_id, content) {
+		if(!stream_id) {
+			console.log("`stream_id` is required to update a project.");
+			return {
+				status: 300,
+				result: "`stream_id` is required to update a project."
+			}
+		}
+
+		/** Update TileDocument with new content */
+		let result = await this.updateTileDocument(stream_id, content, ["orbis", "project"], projectSchemaCommit);
+		return result;
+	}
+
 	/* Users can create a new context which can represent the project or app used by the developer */
 	async createContext(content) {
 		/** User must be connected to call this function. */
@@ -1430,11 +1463,12 @@ export class Orbis {
 		}
 
 		else {
-		  query = this.api.rpc("default_posts_03", {
+		  query = this.api.rpc("default_posts_05", {
 				q_did: options?.did ? options.did : null,
 				q_tag: options?.tag ? options.tag : null,
 				q_only_master: options?.only_master ? options.only_master : false,
 				q_context: options?.context ? options.context : null,
+				q_contexts: options?.contexts ? options.contexts : null,
 				q_master: options?.master ? options.master : null,
 				q_include_child_contexts: options?.include_child_contexts ? options.include_child_contexts : false,
 				q_term: options?.term ? options.term : null

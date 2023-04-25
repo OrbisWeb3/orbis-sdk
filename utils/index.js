@@ -10,6 +10,7 @@ import { getResolver } from 'key-did-resolver'
 import { EthereumWebAuth, getAccountId } from '@didtools/pkh-ethereum'
 import { SolanaWebAuth, getAccountIdByNetwork} from '@didtools/pkh-solana'
 import { TezosWebAuth, getAccountId as getTzAccountId } from '@didtools/pkh-tezos';
+import { StacksWebAuth, getAccountIdByNetwork as getStacksAccountId } from "@didtools/pkh-stacks";
 
 /** Force index a stream. This shouldn't be necessary because our indexer picks up all new streams automatically but at least we are 100% sure. */
 export async function forceIndex(stream_id) {
@@ -275,6 +276,17 @@ export async function getAuthMethod(provider, chain) {
   			}
   		}
       break;
+
+    /** Handle Stacks provider */
+    case "stacks":
+      // TODO: Retrieve user address using @stacks/connect
+      //address = userData.profile.stxAddress.mainnet;
+      accountId = getStacksAccountId("mainnet", address);
+      authMethod = await StacksWebAuth.getAuthMethod(
+        stacksProvider,
+        accountId
+      );
+    break;
 
     /** Handle Tezos wallets */
     case "tezos":
