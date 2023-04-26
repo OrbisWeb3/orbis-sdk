@@ -2,31 +2,33 @@
 export class Store {
 	/** Type of storage we want to use: 'localStorage' or 'AsyncStorage' */
 	type;
+	storeAsync = false;
 
 	/** Initialize storage with one of the supported options */
 	constructor(options) {
+		/** Save storage type */
 		if(options && options.type) {
-			if(options.type == "localStorage" || options.type == "AsyncStorage") {
-				this.type = options.type;
-			} else {
-				console.log("Type not supported, defaulting to localStorage.");
-				this.type = "localStorage";
-			}
+			this.type = options.type;
 		} else {
-			this.type = "localStorage";
+			this.type = localStorage;
+		}
+
+		/** Save storage async settings */
+		if(options && options.storeAsync) {
+			this.storeAsync = options.storeAsync;
 		}
 	}
 
 	/** Function to set an item storage */
 	async setItem(key, value) {
-		switch (this.type) {
+		switch (this.storeAsync) {
 			/** Browser storage */
-			case "localStorage":
-				localStorage.setItem(key, value);
+			case false:
+				this.type.setItem(key, value);
 				return true;
 
 			/** Async storage */
-			default:
+			case true:
 				await this.type.setItem(key, value);
 				return true;
 		}
@@ -36,15 +38,15 @@ export class Store {
 	async getItem(key) {
 
     let res;
-		switch (this.type) {
+		switch (this.storeAsync) {
 			/** Browser storage */
-			case "localStorage":
-        res = localStorage.getItem(key);
+			case false:
+        res = this.type.getItem(key);
 				break;
 
 			/** Async storage */
-			case "AsyncStorage":
-				res = await AsyncStorage.getItem(key);
+			case true:
+				res = await this.type.getItem(key);
 				break;
 		}
     return res;
@@ -52,15 +54,15 @@ export class Store {
 
 	/** Function to remove an item from the local storage */
 	async removeItem(key) {
-		switch (this.type) {
+		switch (this.storeAsync) {
 			/** Browser storage */
-			case "localStorage":
-				localStorage.removeItem(key);
+			case false:
+				this.type.removeItem(key);
 				return true;
 
 			/** Async storage */
-			case "AsyncStorage":
-				await AsyncStorage.removeItem(key);
+			case true:
+				await this.type.removeItem(key);
 				return true;
 		}
 	}
