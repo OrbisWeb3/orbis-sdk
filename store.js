@@ -24,7 +24,7 @@ export class Store {
 		switch (this.storeAsync) {
 			/** Browser storage */
 			case false:
-				this.type.setItem(key, value);
+				localStorage.setItem(key, value);
 				return true;
 
 			/** Async storage */
@@ -36,12 +36,11 @@ export class Store {
 
 	/** Function to retrieve an item storage */
 	async getItem(key) {
-
     let res;
 		switch (this.storeAsync) {
 			/** Browser storage */
 			case false:
-        res = this.type.getItem(key);
+        res = localStorage.getItem(key);
 				break;
 
 			/** Async storage */
@@ -57,7 +56,7 @@ export class Store {
 		switch (this.storeAsync) {
 			/** Browser storage */
 			case false:
-				this.type.removeItem(key);
+				localStorage.removeItem(key);
 				return true;
 
 			/** Async storage */
