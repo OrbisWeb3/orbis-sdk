@@ -19,8 +19,10 @@ import {
 	generateAccessControlConditionsForDMs,
 	encryptDM,
 	encryptPost,
+	decryptString,
 	encryptString,
-	decryptString
+	decryptStringFromAPI,
+	encryptStringFromAPI
 } from "./utils/lit-helpers.js";
 
 /** Internal helpers */
@@ -91,6 +93,7 @@ export class Orbis {
 
 	/** Initiate some values for the class */
 	ceramic;
+	litCloud = false;
 	session;
 	api;
 	chain = "ethereum";
@@ -122,7 +125,10 @@ export class Orbis {
 
 		/** Manage storage */
 		if(options && options.store) {
-			this.store = new Store({type: options.store})
+			this.store = new Store({
+				type: options.store,
+				storeAsync: options.storeAsync
+			});
 		} else {
 			/** Try to automatically set the right storage */
 			if(typeof Storage !== "undefined") {
@@ -130,7 +136,6 @@ export class Orbis {
 			} else {
 				this.store = new Store({type: 'AsyncStorage'})
 			}
-
 		}
 
 		/** Assign Pinata API keys */
@@ -151,6 +156,12 @@ export class Orbis {
 			console.log("Connecting to Lit.");
 			connectLitClient();
 		}
+
+		/** Save litCloud if passed as a parameter */
+		if(options && options.litCloud == true) {
+			this.litCloud = true;
+		}
+		console.log("this.store:", this.store);
 
 		/** Create API object that developers can use to query content from Orbis */
 		this.api = indexer;
@@ -239,7 +250,6 @@ export class Orbis {
 		try {
 			const sessionString = this.session.serialize()
 			this.store.setItem("ceramic-session", sessionString);
-			//localStorage.setItem("ceramic-session", sessionString);
 		} catch(e) {
 			console.log("Error creating sessionString: " + e);
 		}
@@ -249,7 +259,6 @@ export class Orbis {
 
 		/** Step 5 (optional): Initialize the connection to Lit */
 		if(lit == true) {
-			//let _userAuthSig = localStorage.getItem("lit-auth-signature-" + address);
 			let _userAuthSig = await this.store.getItem("lit-auth-signature-" + address);
 			if(!_userAuthSig || _userAuthSig == "" || _userAuthSig == undefined) {
 				try {
@@ -260,7 +269,6 @@ export class Orbis {
 				}
 			} else {
 				/** User is already connected, save current accoutn signature in lit-auth-signature object for easy retrieval */
-				//localStorage.setItem("lit-auth-signature", _userAuthSig);
 				await this.store.setItem("lit-auth-signature", _userAuthSig);
 			}
 		}
@@ -973,35 +981,46 @@ export class Orbis {
 
 	/** Create a new conversation */
 	async createConversation(content) {
-
-		/** Make sure recipients field isn't empty */
-		if(!content || !content.recipients || content.recipients.length == 0) {
-			return {
-				status: 300,
-				error: e,
-				result: "You can't create a conversations without recipients."
+		try {
+			/** Make sure recipients field isn't empty */
+			if(!content || !content.recipients || content.recipients.length == 0) {
+				return {
+					status: 300,
+					error: e,
+					result: "You can't create a conversations without recipients."
+				}
 			}
+
+			/** Will format the conversation to return a clean content object */
+			/** Add sender to the list of recipients to make sure it can decrypt the messages as well */
+		  let _content = {...content};
+		  let recipients = _content.recipients;
+		  recipients.push(this.session.id);
+
+		  /** If conversation has a name we encrypt it */
+			let encryptedConversationName;
+		  if(content.name) {
+		    let { accessControlConditions, solRpcConditions } = generateAccessControlConditionsForDMs(recipients);
+				if(this.litCloud == true) {
+					encryptedConversationName = await encryptStringFromAPI(content.name, accessControlConditions, solRpcConditions);
+				} else {
+					encryptedConversationName = await encryptString(content.name, "ethereum", accessControlConditions);
+				}
+
+		    _content.encryptedName = encryptedConversationName;
+		    _content.name = "";
+		  }
+
+			/** Create tile */
+			let result = await this.createTileDocument(_content, ["orbis", "conversation"], conversationSchemaCommit, "orbis", true);
+
+			/** Return confirmation results */
+			return result;
+		} catch(e) {
+			console.log("Error creating conversation:", e);
+			return null;
 		}
 
-		/** Will format the conversation to return a clean content object */
-		/** Add sender to the list of recipients to make sure it can decrypt the messages as well */
-	  let _content = {...content};
-	  let recipients = _content.recipients;
-	  recipients.push(this.session.id);
-
-	  /** If conversation has a name we encrypt oit */
-	  if(content.name) {
-	    let { accessControlConditions } = generateAccessControlConditionsForDMs(recipients);
-	    let encryptedConversationName = await encryptString(content.name, "ethereum", accessControlConditions);
-	    _content.encryptedName = encryptedConversationName;
-	    _content.name = "";
-	  }
-
-		/** Create tile */
-		let result = await this.createTileDocument(_content, ["orbis", "conversation"], conversationSchemaCommit, "orbis", true);
-
-		/** Return confirmation results */
-		return result;
 	}
 
 	/** Update an existing conversation */
@@ -1022,10 +1041,18 @@ export class Orbis {
 	  let recipients = _content.recipients;
 	  recipients.push(this.session.id);
 
-	  /** If conversation has a name we encrypt oit */
+	  /** If conversation has a name we encrypt it */
 	  if(content.name) {
-	    let { accessControlConditions } = generateAccessControlConditionsForDMs(recipients);
-	    let encryptedConversationName = await encryptString(content.name, "ethereum", accessControlConditions);
+			let { accessControlConditions, solRpcConditions } = generateAccessControlConditionsForDMs(recipients);
+	    let encryptedConversationName;
+			if(this.litCloud == true) {
+				console.log("Encrypt conversation name with cloud.");
+				encryptedConversationName = await encryptStringFromAPI(content.name, accessControlConditions, solRpcConditions);
+			} else {
+				console.log("Encrypt conversation name with client.");
+				encryptedConversationName = await encryptString(content.name, "ethereum", accessControlConditions);
+			}
+
 	    _content.encryptedName = encryptedConversationName;
 	    _content.name = "";
 	  }
@@ -1091,7 +1118,7 @@ export class Orbis {
 
 		/** Try to encrypt content */
 		try {
-			let { encryptedMessage, encryptedMessageSolana } = await encryptDM(conversation.recipients, content.body);
+			let { encryptedMessage, encryptedMessageSolana } = await encryptDM(conversation.recipients, content.body, this.litCloud);
 
 			/** Create content object */
 			let _content = {
@@ -1193,13 +1220,20 @@ export class Orbis {
 		try {
 			switch (this.chain) {
 				case "ethereum":
-					res = await decryptString(content.encryptedMessage, this.chain, this.store);
+					if(this.litCloud == true) {
+						res = await decryptStringFromAPI(content.encryptedMessage, this.chain, this.store);
+					} else {
+						res = await decryptString(content.encryptedMessage, this.chain, this.store);
+					}
 					break;
 				case "solana":
-					res = await decryptString(content.encryptedMessageSolana, this.chain, this.store);
+					if(this.litCloud == true) {
+						res = await decryptStringFromAPI(content.encryptedMessageSolana, this.chain, this.store);
+					} else {
+						res = await decryptString(content.encryptedMessageSolana, this.chain, this.store);
+					}
 					break;
 			}
-
 			return res;
 		} catch(e) {
 			return {
@@ -1490,6 +1524,14 @@ export class Orbis {
 		return({ data, error, status });
 	}
 
+	/** Returns all of the contexts and sub-contexts for a project id */
+	async getContexts(project_id) {
+		let { data, error, status } = await this.api.rpc('get_contexts_with_children', { project_id: project_id });
+
+		/** Return results */
+		return({ data, error, status });
+	}
+
 	/** Returns the details of a context */
 	async getContext(context_id) {
 		let { data, error, status } = await this.api.from("orbis_contexts").select().eq('stream_id', context_id).single();
@@ -1558,7 +1600,7 @@ export class Orbis {
 
 	/** Get profile details */
 	async getProfile(did) {
-		let { data, error, status } = await this.api.from("orbis_v_profiles").select().eq('did', did).single();
+		let { data, error, status } = await this.api.from("orbis_v_profiles").select().ilike('did', did).single();
 
 		/** Return results */
 		return({ data, error, status });
@@ -1734,11 +1776,19 @@ export class Orbis {
 			return null;
 		}
 		let ORBIS_DID = "did:pkh:eip155:1:0xdbcf111ca51572e2f924587faeab857f1e3b824f";
-		let { accessControlConditions } = generateAccessControlConditionsForDMs([this.session.id, ORBIS_DID]);
-		let encryptedEmail = await encryptString(email, "ethereum", accessControlConditions);
+
+		/** Encrypt email using Lit */
+		let encryptedEmail;
+		let { accessControlConditions, solRpcConditions } = generateAccessControlConditionsForDMs([this.session.id, ORBIS_DID]);
+		if(this.litCloud == true) {
+			encryptedEmail = await encryptStringFromAPI(email, accessControlConditions, solRpcConditions);
+		} else {
+			encryptedEmail = await encryptString(email, "ethereum", accessControlConditions);
+		}
+
 		return encryptedEmail;
 	}
 }
 
 /** Additional exports */
-export { generateAccessControlConditionsForDMs, encryptString, decryptString, connectLitClient };
+export { generateAccessControlConditionsForDMs, encryptString, decryptString, encryptStringFromAPI, decryptStringFromAPI, connectLitClient };

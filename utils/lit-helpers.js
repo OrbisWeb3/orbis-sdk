@@ -30,14 +30,6 @@ export async function connectLitClient() {
   } catch(e) {
     console.log("Error connecting to Lit:, e");
   }
-
-  /** Connect to Lit Mumbai
-  litMumbai = new LitJsSdk.LitNodeClient({
-    litNetwork: "mumbai",
-    alertWhenUnauthorized: false,
-    debug: false
-  });
-  await litMumbai.connect();*/
 }
 
 /** Returns lit object */
@@ -277,6 +269,43 @@ export async function decryptString(encryptedContent, chain, store, forcedAuthSi
   }
 }
 
+/** Lit Cloud only: Decrypt string from API (can be used to support encryption / decryption from React Native for example) */
+export async function decryptStringFromAPI(encryptedContent, chain, store) {
+
+  /** Retrieve AuthSig */
+  let authSig = await getAuthSig(store);
+
+  /** Making sure authsig is present  */
+  if(!authSig) {
+    return {
+      status: 300,
+      result: "Error decrypting string.",
+      error: "AuthSig must be present."
+    }
+  }
+
+  const requestOptions = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      authSig: JSON.stringify(authSig),
+      chain: chain,
+      encryptedContent: encryptedContent
+    })
+  };
+  try {
+    let _data = await fetch("https://lit.orbis.club/lit-decrypt-v2", requestOptions);
+    let _result = await _data.json();
+    return _result;
+  } catch(e) {
+    console.log("Error decrypting string with API: ", e)
+    return {
+      status: 300,
+      result: e
+    };
+  }
+}
+
 /** API debug: Used to turn the decrypted symmetric key into a string  */
 export async function decryptBlob(decodedString, decryptedSymmKey) {
   let _blob = new Blob([decodedString]);
@@ -288,7 +317,7 @@ export async function decryptBlob(decodedString, decryptedSymmKey) {
 }
 
 /** Encryp a DM */
-export async function encryptDM(recipients, body) {
+export async function encryptDM(recipients, body, litCloud) {
   /** Step 1: Retrieve access control conditions from recipients */
   let { accessControlConditions, solRpcConditions } = generateAccessControlConditionsForDMs(recipients);
 
@@ -297,24 +326,31 @@ export async function encryptDM(recipients, body) {
   let encryptedMessageSolana = null;
 
   /** Encrypt string for EVM and return result */
-  if(accessControlConditions && accessControlConditions.length > 0) {
-    try {
-      encryptedMessage = await encryptString(body, "ethereum", accessControlConditions);
-    } catch(e) {
-      console.log("Error encrypting DM: ", e);
-      throw new Error(e)
+  if(litCloud == true) {
+    let resFromAPI = await encryptStringFromAPI(body, accessControlConditions, solRpcConditions);
+    encryptedMessage = resFromAPI.encryptedMessage;
+    encryptedMessageSolana = resFromAPI.encryptedMessageSolana;
+  } else {
+    if(accessControlConditions && accessControlConditions.length > 0) {
+      try {
+        encryptedMessage = await encryptString(body, "ethereum", accessControlConditions);
+      } catch(e) {
+        console.log("Error encrypting DM: ", e);
+        throw new Error(e)
+      }
+    }
+
+    /** Encrypt string for Solana and return result */
+    if(solRpcConditions && solRpcConditions.length > 0) {
+      try {
+        encryptedMessageSolana = await encryptString(body, "solana", solRpcConditions);
+      } catch(e) {
+        console.log("Error encrypting DM: ", e);
+        throw new Error(e)
+      }
     }
   }
 
-  /** Encrypt string for Solana and return result */
-  if(solRpcConditions && solRpcConditions.length > 0) {
-    try {
-      encryptedMessageSolana = await encryptString(body, "solana", solRpcConditions);
-    } catch(e) {
-      console.log("Error encrypting DM: ", e);
-      throw new Error(e)
-    }
-  }
 
   return {
     encryptedMessage: encryptedMessage,
@@ -409,66 +445,25 @@ export async function encryptString(body, chain = "ethereum", controlConditions)
   }
 }
 
-/** Debug only: Encrypt string from API */
+/** Lit Cloud only: Encrypt string from API (can be used to support encryption / decryption from React Native for example)  */
 export async function encryptStringFromAPI(body, accessControlConditions, solRpcConditions) {
-
-  /** Creating variables for the request */
-  const requestOptions = {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      accessControlConditions: accessControlConditions,
-      solRpcConditions: solRpcConditions,
-      body: body
-    })
-  };
   try {
+    /** Creating variables for the request */
+    const requestOptions = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accessControlConditions: accessControlConditions,
+        solRpcConditions: solRpcConditions,
+        body: body
+      })
+    };
+
     let _data = await fetch("https://lit.orbis.club/lit-encrypt-v2", requestOptions);
-    console.log("data retrieved from API: ", _data);
     let _result = await _data.json();
-    console.log("_result retrieved from API: ", _result);
     return _result.result;
   } catch(e) {
     console.log("Error encrypting string with API: ", e)
-    return {
-      status: 300,
-      result: e
-    };
-  }
-}
-
-/** Debug only: Decrypt string from API */
-export async function decryptStringFromAPI(encryptedContent, chain) {
-
-  /** Retrieve AuthSig */
-  let authSig = await getAuthSig(store);
-
-  /** Making sure authsig is present  */
-  if(!authSig) {
-    return {
-      status: 300,
-      result: "Error decrypting string.",
-      error: "AuthSig must be present."
-    }
-  }
-
-  const requestOptions = {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      authSig: JSON.stringify(authSig),
-      chain: chain,
-      encryptedContent: encryptedContent
-    })
-  };
-  try {
-    let _data = await fetch("https://lit.orbis.club/lit-decrypt-v2", requestOptions);
-    console.log("In decryptStringFromAPI() - _data: ", _data);
-    let _result = await _data.json();
-    console.log("In decryptStringFromAPI() - _result: ", _result);
-    return _result;
-  } catch(e) {
-    console.log("Error decrypting string with API: ", e)
     return {
       status: 300,
       result: e
