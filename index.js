@@ -210,7 +210,6 @@ export class Orbis {
 		}
 
 		/** Update the default accountId used to connect */
-		console.log("Default chain to use: ", defaultChain);
 		accountId.chainId.reference = defaultChain.toString();
 
 		/** Step 2: Create an authMethod object using the address connected */
@@ -274,7 +273,7 @@ export class Orbis {
 		}
 
 		/** Step 6: Force index did to retrieve blockchain details automatically */
-		let _resDid = await forceIndexDid(this.session.id);
+		forceIndexDid(this.session.id);
 
 		/** Will check if user has new credentials available  */
 		fetchUserCredentials(this.session.id);
@@ -336,11 +335,12 @@ export class Orbis {
 		/** User is connecting with a web2 provider */
 		if(provider == 'oauth') {
 			/** Generate request variables for API call */
-			let oauthData = await fetch("http://localhost:3004/assign-pkp", {
+			let oauthData = await fetch("https://lit.orbis.club/assign-pkp", {
 	      method: 'POST',
 	      headers: { 'Content-Type': 'application/json' },
 	      body: JSON.stringify({
-	        accessToken: oauth.accessToken,
+	        token: oauth.token,
+					code: oauth.code,
 	        userId: oauth.userId,
 	        authType: oauth.type,
 	        hostname: window.location.hostname
@@ -352,33 +352,19 @@ export class Orbis {
 			if(oauthResult.status == 200) {
 				/** API generated a new PKP and a session-string, proceed to login the user */
 				if(oauthResult.sessionString) {
-					console.log("API generated a new PKP and a session-string, proceed to login the user: ", oauthResult);
-	        await this.isConnected(oauthResult.sessionString);
-	      }
-
-				/** User already has a PKP, get it to sign a SIWE message */
-				else {
-	        console.log("User is connecting to an existing pkp: ", oauthResult);
-					let pkpAuthenticated = await authenticatePkp({
-						ipfs: oauthResult.result.authMethod.ipfs,
-						address: oauthResult.result.pkp.address,
-						publicKey: oauthResult.result.pkp.publicKey,
-						accessToken: oauth.accessToken,
-						userId: oauth.userId,
-						authMethodType: 3
-					});
-
-					if(pkpAuthenticated.status == 200) {
-						this.session = pkpAuthenticated.session;
-						console.log("this.session", this.session);
-						did = this.session.did;
-					} else {
-						return {
-							status: 300,
-							result: "Couldn't authenticate PKP."
-						}
+					console.log("Successfully connected with the PKP, proceed to login the user: ", oauthResult);
+					await this.store.setItem("ceramic-session", oauthResult.sessionString);
+					await this.store.setItem("lit-auth-signature", oauthResult.authSig);
+	        let connectRes = await this.isConnected(oauthResult.sessionString);
+					return connectRes;
+	      } else {
+					console.log("Error assigning PKP to user.");
+					return {
+						status: 300,
+						error: "Error assigning PKP to user.",
+						result: oauthResult
 					}
-	      }
+				}
 			} else {
 				return {
 					status: 300,
@@ -436,7 +422,7 @@ export class Orbis {
 		}
 
 		/** Step 6: Force index did to retrieve blockchain details automatically */
-		let _resDid = await forceIndexDid(this.session.id);
+		forceIndexDid(this.session.id);
 
 		/** Will check if user has new credentials available  */
 		fetchUserCredentials(this.session.id);
@@ -518,7 +504,7 @@ export class Orbis {
 		}
 
 		/** Step 6: Force index did to retrieve blockchain details automatically */
-		let _resDid = await forceIndexDid(this.session.id);
+		forceIndexDid(this.session.id);
 
 		/** Step 7: Get user profile details */
 		let { data, error, status } = await this.getProfile(this.session.id);
