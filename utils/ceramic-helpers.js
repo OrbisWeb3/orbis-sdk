@@ -13,7 +13,6 @@ import { evmEmptyAuthSig, executeLitAction } from "./lit-helpers.js";
 
   /** Step 2: Create a SIWE message */
   let siweMessage = createSiweMessage(options.address.toLowerCase(), didKey.id);
-  console.log("siweMessage: ", siweMessage);
 
   const action = {
     ipfsId: options.ipfs,

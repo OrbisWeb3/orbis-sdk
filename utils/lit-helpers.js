@@ -55,7 +55,6 @@ async function litIsReady() {
 
 /** Requires user to sign a message which will generate the lit-signature */
 export async function generateLitSignature(provider, account, providerNetwork, store) {
-  console.log("Enter generateLitSignature()");
   let signedMessage;
   let sig;
 

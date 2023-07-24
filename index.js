@@ -161,7 +161,6 @@ export class Orbis {
 		if(options && options.litCloud == true) {
 			this.litCloud = true;
 		}
-		console.log("this.store:", this.store);
 
 		/** Create API object that developers can use to query content from Orbis */
 		this.api = indexer;
@@ -343,7 +342,6 @@ export class Orbis {
 					code: oauth.code,
 	        userId: oauth.userId,
 	        authType: oauth.type,
-	        hostname: window.location.hostname
 	      })
 	    });
 			let oauthResult = await oauthData.json();
@@ -358,11 +356,16 @@ export class Orbis {
 	        let connectRes = await this.isConnected(oauthResult.sessionString);
 					return connectRes;
 	      } else {
-					console.log("Error assigning PKP to user.");
-					return {
-						status: 300,
-						error: "Error assigning PKP to user.",
-						result: oauthResult
+					if(oauth.type == "email") {
+						/** To avoid returning an error when users are verifying the email address (first step for email auth) */
+						return oauthResult;
+					} else {
+						console.log("Error assigning PKP to user.");
+						return {
+							status: 300,
+							error: "Error assigning PKP to user.",
+							result: oauthResult
+						}
 					}
 				}
 			} else {
@@ -1483,13 +1486,14 @@ export class Orbis {
 		}
 
 		else {
-		  query = this.api.rpc("default_posts_05", {
+		  query = this.api.rpc("default_posts_06", {
 				q_did: options?.did ? options.did : null,
 				q_tag: options?.tag ? options.tag : null,
 				q_only_master: options?.only_master ? options.only_master : false,
 				q_context: options?.context ? options.context : null,
 				q_contexts: options?.contexts ? options.contexts : null,
 				q_master: options?.master ? options.master : null,
+				q_reply_to: options?.reply_to ? options.reply_to : null,
 				q_include_child_contexts: options?.include_child_contexts ? options.include_child_contexts : false,
 				q_term: options?.term ? options.term : null
 			}).range(page * limit, (page + 1) * limit - 1).order(options?.order_by ? options.order_by : 'timestamp', { ascending: ascending });
