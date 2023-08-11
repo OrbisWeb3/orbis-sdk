@@ -50,7 +50,7 @@ let PINATA_SECRET_API_KEY = null;
 
 /** Set schemas Commit IDs */
 const postSchemaStream = "kjzl6cwe1jw1498inegtpji0iqf0htspb0qqswlofjy0hak1s3u2pf19qql7oak";
-const postSchemaCommit = "k1dpgaqe3i64kjuyet4w0zyaqwamf9wrp1jim19y27veqkppo34yghivt2pag4wxp0fv2yl04ypy3enwg9eisk6zkcq0a8buskv2tyq5rlldhi2vg3fkmfug4";
+const postSchemaCommit = "k1dpgaqe3i64kjuyet4w0zyaqwamf9wrp1jim19y27veqkppo34yghivt2pag4wxp0fv2ykzc0sppqh7zdmujsr7w11y96ofq0guo5q33p1q54opbvw8hvwnj";
 
 const groupSchemaStream = "kjzl6cwe1jw1487a0xluwl3ip6lcdcfn8ahgomsbf8x5rf65mktdjuouz8xopbf";
 const groupSchemaCommit = "k3y52l7qbv1fry2bramzfrq10z2vrywf96yk6n61d8ffsyzvs0k0wd68sanjjo16o";
@@ -344,7 +344,9 @@ export class Orbis {
 	        authType: oauth.type,
 	      })
 	    });
+			console.log("oauthData:", oauthData);
 			let oauthResult = await oauthData.json();
+			console.log("oauthResult:", oauthResult);
 
 			/** Request was successful, proceed */
 			if(oauthResult.status == 200) {
@@ -901,6 +903,27 @@ export class Orbis {
 
 		/** Try to create the stream */
 		let result = await this.createTileDocument(content, ["orbis", "group_member"], groupMemberSchemaCommit);
+		return result;
+	}
+
+	/** Beta: Will create a new notification subscription stream */
+	async addNotificationsSubscription(content) {
+		/** Make sure value is available */
+		if(!content.value) {
+			console.log("`value` is required.");
+			return {
+				status: 300,
+				result: "`value` is required."
+			}
+		}
+
+		/** Encrypt value */
+		let { encryptedMessage } = await this.encryptEmail(content.value);
+
+		/** Create stream content */
+		content.value = encryptedMessage;
+
+		let result = await this.createTileDocument(content, ["orbis", "notification_subscription"], null);
 		return result;
 	}
 
@@ -1486,7 +1509,7 @@ export class Orbis {
 		}
 
 		else {
-		  query = this.api.rpc("default_posts_06", {
+		  query = this.api.rpc("default_posts_08", {
 				q_did: options?.did ? options.did : null,
 				q_tag: options?.tag ? options.tag : null,
 				q_only_master: options?.only_master ? options.only_master : false,
@@ -1508,7 +1531,7 @@ export class Orbis {
 
 	/** Get post details */
 	async getPost(post_id) {
-		let { data, error, status } = await this.api.from("orbis_v_posts").select().eq('stream_id', post_id).single();
+		let { data, error, status } = await this.api.from("orbis_v_posts_v2").select().eq('stream_id', post_id).single();
 
 		/** Return results */
 		return({ data, error, status });
