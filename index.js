@@ -309,7 +309,7 @@ export class Orbis {
   }
 
 	/** The connect function will connect to an EVM wallet and create or connect to a Ceramic did */
-  async connect_v2({provider, chain = "ethereum", lit = false, oauth = null}) {
+  async connect_v2({provider, chain = "ethereum", lit = false, oauth = null, appName = null}) {
 		/** Save chain we are using in global state */
 		this.chain = chain;
 
@@ -329,7 +329,7 @@ export class Orbis {
 		let did;
 
 		/** Retrieve authMethod and address based on the provider and chain passed as a parameter */
-		let { authMethod, address } = await getAuthMethod(provider, chain);
+		let { authMethod, address } = await getAuthMethod(provider, chain, appName);
 
 		/** User is connecting with a web2 provider */
 		if(provider == 'oauth') {
@@ -1509,7 +1509,7 @@ export class Orbis {
 		}
 
 		else {
-		  query = this.api.rpc("default_posts_08", {
+		  query = this.api.rpc("default_posts_09", {
 				q_did: options?.did ? options.did : null,
 				q_tag: options?.tag ? options.tag : null,
 				q_only_master: options?.only_master ? options.only_master : false,
@@ -1518,7 +1518,9 @@ export class Orbis {
 				q_master: options?.master ? options.master : null,
 				q_reply_to: options?.reply_to ? options.reply_to : null,
 				q_include_child_contexts: options?.include_child_contexts ? options.include_child_contexts : false,
-				q_term: options?.term ? options.term : null
+				q_term: options?.term ? options.term : null,
+				q_is_reply: options?.is_reply ? options.is_reply : null,
+				q_is_repost: options?.is_repost ? options.is_repost : null,
 			}).range(page * limit, (page + 1) * limit - 1).order(options?.order_by ? options.order_by : 'timestamp', { ascending: ascending });
 		}
 

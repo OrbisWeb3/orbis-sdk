@@ -7,7 +7,7 @@ import { Ed25519Provider } from 'key-did-provider-ed25519'
 import { getResolver } from 'key-did-resolver'
 
 /** Manage did:pkh */
-import { EthereumWebAuth, getAccountId } from '@didtools/pkh-ethereum'
+import { EthereumWebAuth, EthereumNodeAuth, getAccountId } from '@didtools/pkh-ethereum'
 import { SolanaWebAuth, getAccountIdByNetwork} from '@didtools/pkh-solana'
 import { TezosWebAuth, getAccountId as getTzAccountId } from '@didtools/pkh-tezos';
 import { StacksWebAuth, getAccountIdByNetwork as getStacksAccountId } from "@didtools/pkh-stacks";
@@ -186,7 +186,7 @@ export function checkVcOwnership(user_credentials, credential_required) {
 }
 
 /** Function to return the correct authMethod based on the provider and network used */
-export async function getAuthMethod(provider, chain) {
+export async function getAuthMethod(provider, chain, appName) {
   let authMethod;
   let address;
   let accountId;
@@ -210,6 +210,7 @@ export async function getAuthMethod(provider, chain) {
       /** Step 2: Check if user already has an active account on Orbis */
       let defaultChain = "1";
       address = addresses[0].toLowerCase();
+      console.log("Connecting with:", address);
       accountId = await getAccountId(provider, address)
 
       /** Check if the user trying to connect already has an existing did on Orbis */
@@ -228,8 +229,16 @@ export async function getAuthMethod(provider, chain) {
 
       /** Step 2: Create an authMethod object using the address connected */
       try {
-        authMethod = await EthereumWebAuth.getAuthMethod(provider, accountId);
+        if(appName) {
+          console.log("appName " + appName + " received, login with EthereumNodeAuth.");
+          /** Login with NodeAuth if an app name is passed as a parameter (might be used for React Native as well) */
+          authMethod = await EthereumNodeAuth.getAuthMethod(provider, accountId, appName);
+        } else {
+          /** Login with WebAuth if no app name passed */
+          authMethod = await EthereumWebAuth.getAuthMethod(provider, accountId);
+        }
       } catch(e) {
+        console.log("Error creating Ethereum authMethod object for Ceramic:", e);
         return {
           status: 300,
           error: e,
