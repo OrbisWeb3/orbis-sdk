@@ -1076,8 +1076,20 @@ export class Orbis {
 		return result;
 	}
 
-	/** Send a direct message in a conversation */
+	/** Send a new message in a conversation */
 	async sendMessage(content, data) {
+		let res = await this.prepareMessage(null, content, data);
+		return res;
+	}
+
+	/** Update an existing message in a conversation */
+	async updateMessage(stream_id, content, data) {
+		let res = await this.prepareMessage(stream_id, content, data);
+		return res;
+	}
+
+	/** Prepare the direct message being sent */
+	async prepareMessage(stream_id, content, data) {
 		/** Require `message` */
 		if(!content || !content.body || content.body == undefined || content.body == "") {
 			return {
@@ -1145,7 +1157,13 @@ export class Orbis {
 			}
 
 			/** Create tile for this message */
-			let result = await this.createTileDocument(_content, ["orbis", "message"], messageSchemaCommit);
+			let result;
+			if(stream_id) {
+				result = await this.updateTileDocument(stream_id, _content, ["orbis", "message"], messageSchemaCommit);
+			} else {
+				result = await this.createTileDocument(_content, ["orbis", "message"], messageSchemaCommit);
+			}
+
 			return result;
 		} catch(e) {
 			return {
