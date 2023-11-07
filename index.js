@@ -694,7 +694,7 @@ export class Orbis {
 		}
 
 		/** Make sure post isn't empty */
-		if(!content || !content.body || content.body == "" || content.body == undefined) {
+		if(!content || !content.body || content.body == undefined) {
 			return {
 				status: 300,
 				result: "You can't share an empty post."
