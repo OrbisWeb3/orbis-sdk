@@ -37,4 +37,4 @@ Here are some examples of applications that could be built on top of Orbis:
 - And many other things...
 
 ### Documentation
-Our documentation is available at https://useorbis.com/documentation
+Our legacy documentation is available at https://useorbis.com/documentation
