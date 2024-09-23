@@ -1,7 +1,7 @@
 # Orbis Social
 
 > [!IMPORTANT]
-> 🚨 Orbis Social SDK is a legacy product dedicated to Social. If you want to access our latest product, check [here](https://useorbis.com/)
+> 🚨 Orbis Social SDK is a legacy product dedicated to Social. If you want to access our latest product, check [here](https://github.com/OrbisWeb3/orbisdb)
 
 Driven by developer feedback and a new role as a core developer in the Ceramic ecosystem, [Orbis](https://useorbis.com/) is expanding its focus beyond social to offer a simple and efficient gateway for storing and managing open data on Ceramic. 
 
